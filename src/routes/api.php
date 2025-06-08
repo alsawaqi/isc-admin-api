@@ -7,8 +7,10 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ProductTypesController;
 use App\Http\Controllers\AuthenticatedController;
+use App\Http\Controllers\ProductBrandsController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\ProductDepartmentsController;
+use App\Http\Controllers\ProductManufactureController;
 use App\Http\Controllers\ProductSubDepartmentController;
 use App\Http\Controllers\ProductSubSubDepartmentController;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
@@ -39,6 +41,25 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
        Route::get('/productdepartment', 'index');
        Route::post('/productdepartment', 'store');
        Route::get('/sub-departments/{departmentId}' ,'getSubDepartments');
+    });
+
+
+
+    Route::controller(ProductBrandsController::class)->group(function () {
+          
+         Route::get('/productbrands', 'index');
+         Route::post('/productbrands', 'store');
+  
+
+    });
+
+
+    Route::controller(ProductManufactureController::class)->group(function () {
+          
+         Route::get('/productmanufacture', 'index');
+         Route::post('/productmanufacture', 'store');
+      
+
     });
 
 

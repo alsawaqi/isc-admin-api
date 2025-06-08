@@ -536,21 +536,39 @@ return new class extends Migration
 
         Schema::create('Products_Types_Master_T', function (Blueprint $table) {
             $table->id();
+            $table->string('Product_Types_Code', 30)->unique()->nullable();
             $table->string('name')->unique();
             $table->timestamps();
+         });
 
-
+        Schema::create('Products_Brands_Master_T', function (Blueprint $table) {
+            $table->id();
+            $table->string('Product_Brand_Code', 30)->unique()->nullable(); // Renamed from Product_Brand_Id
+            $table->string('name')->unique();
+            $table->timestamps();
         });
 
+
+
+
+        Schema::create('Products_Manufacture_Master_T', function (Blueprint $table) {
+            $table->id();
+            $table->string('Product_Manufacture_Code', 30)->unique()->nullable(); // Renamed from Product_Types_Id
+            $table->string('name')->unique();
+            $table->timestamps();
+        });
 
         // Products Table
         Schema::create('Products_Master_T', function (Blueprint $table) {
             $table->id();
             $table->string('Product_Code', 30)->unique()->nullable(); // Renamed from Product_Id
-            $table->foreignId('product_type_id')->constrained('Products_Types_Master_T')->onDelete('no action');
-            $table->foreignId('product_sub_sub_department_id')->constrained('Products_Sub_Sub_Department_T')->onDelete('no action');
-            $table->foreignId('product_sub_department_id')->constrained('Products_Sub_Department_T')->onDelete('no action');
             $table->foreignId('product_department_id')->constrained('Products_Departments_T')->onDelete('no action');
+            $table->foreignId('product_sub_department_id')->constrained('Products_Sub_Department_T')->onDelete('no action');
+            $table->foreignId('product_sub_sub_department_id')->constrained('Products_Sub_Sub_Department_T')->onDelete('no action');
+
+            $table->foreignId('product_type_id')->constrained('Products_Types_Master_T')->onDelete('no action');
+            $table->foreignId('product_brand_id')->constrained('Products_Brands_Master_T')->onDelete('no action');
+            $table->foreignId('product_manufacture_id')->constrained('Products_Manufacture_Master_T')->onDelete('no action');
 
             $table->string('name')->index();
             $table->string('name_ar')->index();

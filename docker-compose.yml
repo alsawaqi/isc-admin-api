@@ -29,6 +29,16 @@ services:
     depends_on:
       - laravel-app
 
+  composer:
+    image: composer:latest
+    container_name: composer
+    volumes:
+      - /home/abdallah644/projects/my-projects/laravel.mssql/src:/app
+    working_dir: /app
+    command: install
+    networks:
+      - proxy_network
+
 networks:
   proxy_network:
     external: true

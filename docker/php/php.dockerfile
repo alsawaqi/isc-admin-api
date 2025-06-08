@@ -1,4 +1,4 @@
-FROM php:8.3-fpm
+FROM php:8.3.7-fpm
 
 COPY docker/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 
@@ -15,7 +15,10 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     zip \
     unzip \
-    git
+    git \
+    && apt-get upgrade -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Add Microsoft package signing key and repo (securely)
 RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc \
