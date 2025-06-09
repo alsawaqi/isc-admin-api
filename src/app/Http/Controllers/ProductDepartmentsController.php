@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Helpers\CodeGenerator;
 use App\Models\ProductDepartments;
 use App\Models\ProductSubDepartment;
+use App\Models\ProductSubSubDepartment;
 
 class ProductDepartmentsController extends Controller
 {
@@ -20,13 +21,19 @@ class ProductDepartmentsController extends Controller
      }
 
 
-     public function getSubDepartments($departmentId)
-{
+ public function getSubDepartments($departmentId)
+ {
     $subDepartments = ProductSubDepartment::where('product_department_id', $departmentId)->get();
 
     return response()->json([
         'sub_departments' => $subDepartments
     ]);
+ }
+
+ public function bySubDepartment($subDepartmentId)
+{
+    $subSubDepartments = ProductSubSubDepartment::where('product_sub_department_id', $subDepartmentId)->get();
+    return response()->json($subSubDepartments);
 }
  
     public function store(Request $request)

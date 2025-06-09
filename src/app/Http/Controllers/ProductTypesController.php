@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ProductTypes;
 use Illuminate\Http\Request;
+use App\Helpers\CodeGenerator;
 
 class ProductTypesController extends Controller
 {
@@ -18,16 +19,15 @@ class ProductTypesController extends Controller
 
     public function store(Request $request)
     {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-         
+
+       $pt_code = CodeGenerator::createCode('PRODTYPE', 'Products_Types_Master_T', 'Product_Types_Code');
+        
+        
+        ProductTypes::create([
+           'Product_Types_Code' => $pt_code,
+            'name' => $request->name,
         ]);
 
-        $productType = new  ProductTypes();
-        $productType->name = $validatedData['name'];
-   
-        $productType->save();
-
-        return response()->json(['message' => 'Product type created successfully', 'data' => 's'], 201);
+        return response()->json(['message' => 'Product type created successfully', 'data' => ''], 201);
     }
 }

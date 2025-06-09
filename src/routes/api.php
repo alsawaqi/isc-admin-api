@@ -8,6 +8,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\ProductTypesController;
 use App\Http\Controllers\AuthenticatedController;
 use App\Http\Controllers\ProductBrandsController;
+use App\Http\Controllers\ProductMasterController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\ProductDepartmentsController;
 use App\Http\Controllers\ProductManufactureController;
@@ -41,6 +42,9 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
        Route::get('/productdepartment', 'index');
        Route::post('/productdepartment', 'store');
        Route::get('/sub-departments/{departmentId}' ,'getSubDepartments');
+       Route::get('/sub-sub-departments/{subDepartmentId}' ,'bySubDepartment');
+
+      
     });
 
 
@@ -54,13 +58,21 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     });
 
 
+    Route::controller(ProductMasterController::class)->group(function () {
+  
+           Route::get('/productmaster', 'index');
+           Route::post('/productmaster', 'store');
+           Route::get('/productmaster/{id}', 'show');
+           Route::put('/productmaster/{id}', 'update');
+           Route::delete('/productmaster/{id}', 'destroy');
+     
+    
+   });
+
     Route::controller(ProductManufactureController::class)->group(function () {
-          
          Route::get('/productmanufacture', 'index');
          Route::post('/productmanufacture', 'store');
-      
-
-    });
+      });
 
 
 

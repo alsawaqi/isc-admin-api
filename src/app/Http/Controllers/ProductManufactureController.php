@@ -12,9 +12,7 @@ class ProductManufactureController extends Controller
 
     public function index()
     {
-        return response()->json(
-            ProductManufacture::orderBy('id', 'DESC')->get()
-        );
+       return response()->json(ProductManufacture::orderBy('id', 'DESC')->get());
     }
     public function store(Request $request)
     {
