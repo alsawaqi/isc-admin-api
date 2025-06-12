@@ -9,6 +9,11 @@ use App\Http\Controllers\PostController;
 use App\Http\Controllers\Auth\LoginController;
 
  
+
+Route::get('/', function () {
+     echo "Welcome to the Laravel Application!";
+});
+
  
 
 
