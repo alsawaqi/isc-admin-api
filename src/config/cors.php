@@ -6,7 +6,10 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['http://localhost:82'],
+    'allowed_origins' => [
+        'http://localhost:82',
+        'https://abdallahweb.com',
+    ],
 
     'allowed_origins_patterns' => [],
 
