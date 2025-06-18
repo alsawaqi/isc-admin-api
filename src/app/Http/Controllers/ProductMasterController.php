@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\ProductMaster;
 use App\Helpers\CodeGenerator;
+use App\Models\ProductsBarcodes;
 use Illuminate\Support\Facades\Auth;
 
 class ProductMasterController extends Controller
@@ -21,9 +22,13 @@ class ProductMasterController extends Controller
 
     public function store(Request $request)
     {
+
+        try{
+
+       
         $productMasterCode = CodeGenerator::createCode('PROD', 'Products_Master_T', 'Product_Code');
 
-        ProductMaster::create([
+       $product = ProductMaster::create([
                                 'Product_Code' => $productMasterCode,
                                 'product_department_id' => $request->product_department_id,
                                 'product_sub_department_id' => $request->product_sub_department_id,
@@ -36,9 +41,35 @@ class ProductMasterController extends Controller
                                 'description' => $request->description,
                                 'price' => $request->price,
                                 'stock' => $request->stock,
+                                'inhouse_barcode' => $request->inhouse_barcode,
                                 'Created_By' => Auth::id()// Optional, if using auth
         ]);
 
-        return response()->json(['message' => 'Product created successfully'], 201);
+
+
+    if ($request->has('barcodes') && is_array($request->barcodes)) {
+    foreach ($request->barcodes as $code) {
+        if (!is_string($code) || empty($code)) continue;
+
+
+          
+
+            $productBarCode = CodeGenerator::createCode('PRBAR', 'Products_Barcodes_T', 'product_barcode_code');
+
+
+            ProductsBarcodes::create([
+                'product_barcode_code' => $productBarCode,
+                'product_id' => $product->id,
+                'barcode' => $code
+            ]);
+           }
+}
+ 
+
+       return response()->json(['message' => 'Have Created Successfully'], 201);
+
+        }catch(\Exception $e){
+            return response()->json(['error' => $e], 500);
+        }
     }
 }

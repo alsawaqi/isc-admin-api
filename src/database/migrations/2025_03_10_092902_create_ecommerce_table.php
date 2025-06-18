@@ -547,11 +547,8 @@ return new class extends Migration
             $table->string('name')->unique();
             $table->timestamps();
         });
-
-
-
-
-        Schema::create('Products_Manufacture_Master_T', function (Blueprint $table) {
+ 
+       Schema::create('Products_Manufacture_Master_T', function (Blueprint $table) {
             $table->id();
             $table->string('Product_Manufacture_Code', 30)->unique()->nullable(); // Renamed from Product_Types_Id
             $table->string('name')->unique();
@@ -615,7 +612,7 @@ return new class extends Migration
         Schema::create('Products_Barcodes_T', function (Blueprint $table) {
             $table->id();
 
-            $table->string('product_barcode_code', 17)->unique()->nullable(); // Renamed from Product_Barcode_Id
+            $table->string('product_barcode_code', 30)->unique()->nullable(); // Renamed from Product_Barcode_Id
             $table->foreignId('product_id')->constrained('Products_Master_T')->onDelete('no action');
             $table->string('barcode')->unique();
             $table->string('barcode_type')->nullable();

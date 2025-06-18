@@ -84,6 +84,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
     Route::controller(ProductSubDepartmentController::class)->group(function () {
          Route::get('/productsubdepartment', 'index');
+         Route::get('/product-departments-with-sub', 'getWithSubDepartments');
          Route::post('/productsubdepartment', 'store');
 
      });
@@ -91,6 +92,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
      Route::controller(ProductSubSubDepartmentController::class)->group(function () {
  
+         Route::get('/full-product-department-tree', 'getFullDepartmentTree');
          Route::get('/sub-sub-departments', 'index');
          Route::post('/sub-sub-departments', 'store');
        
@@ -101,13 +103,16 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
     Route::controller(RolePermissionController::class)->group(function () {
             Route::post('/roles',  'storeRole');
-            Route::get('/roles', function () {
-                             return SecurityRole::select('id', 'name','created_at')->get();
-                           });
+            
             Route::post('/permissions',  'storePermission');
             Route::post('/assign-role',   'assignRole');     
       });
 
+
+    Route::get('/roles', function () { 
+         return SecurityRole::select('id', 'name','created_at')
+                              ->get();
+        });
 
    Route::post(RoutePath::for('logout', '/logout'), [AuthenticatedSessionController::class, 'destroy']);
 });

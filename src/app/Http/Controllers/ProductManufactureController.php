@@ -21,7 +21,7 @@ class ProductManufactureController extends Controller
         ProductManufacture::create([
             'Product_Manufacture_Code' => $productManufactureCode,
             'name' => $request->name,
-            
+            'Department' => $request->department
         ]);
 
         return response()->json(['message' => 'Product manufacture created successfully'], 201);

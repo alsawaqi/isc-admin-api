@@ -15,4 +15,14 @@ class ProductSubDepartment extends Model
         return $this->belongsTo(ProductDepartments::class, 'product_department_id');
     }
 
+    public function subSubDepartments()
+    {
+        return $this->hasMany(ProductSubSubDepartment::class, 'product_sub_department_id', 'id');
+    }
+
+
+    public function department()
+        {
+            return $this->belongsTo(ProductDepartments::class, 'product_department_id', 'id');
+        }
 }
