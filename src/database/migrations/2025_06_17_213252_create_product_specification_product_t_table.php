@@ -11,16 +11,16 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('product_specification_product_t', function (Blueprint $table) {
+        Schema::create('Product_Specification_Product_T', function (Blueprint $table) {
             $table->id();
-    $table->foreignId('product_id')
-          ->constrained('Products_Master_T')
-          ->onDelete('cascade');
-    $table->foreignId('product_specification_description_id')
-          ->constrained('product_specification_description_t')
-          ->onDelete('cascade');
-    $table->string('value'); // e.g., 'Large', 'Red'
-    $table->timestamps();
+            $table->foreignId('product_id')
+                ->constrained('Products_Master_T')
+                ->onDelete('cascade');
+            $table->foreignId('product_specification_description_id')
+                ->constrained('product_specification_description_t')
+                ->onDelete('cascade');
+            $table->string('value'); // e.g., 'Large', 'Red'
+            $table->timestamps();
         });
     }
 
@@ -29,6 +29,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('product_specification_product_t');
+        Schema::dropIfExists('Product_Specification_Product_T');
     }
 };
