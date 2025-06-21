@@ -11,7 +11,7 @@ use App\Http\Controllers\Auth\LoginController;
  
 
 Route::get('/', function () {
-     echo "Welcome to the Laravel Applications!";
+     echo "Welcome to the Laravel Applications to if it works!";
 });
 
  
