@@ -14,6 +14,7 @@ use App\Http\Controllers\ProductDepartmentsController;
 use App\Http\Controllers\ProductManufactureController;
 use App\Http\Controllers\ProductSubDepartmentController;
 use App\Http\Controllers\ProductSubSubDepartmentController;
+use App\Http\Controllers\ProductSpecificationDescriptionController;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
  
 
@@ -87,6 +88,14 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
          Route::get('/product-departments-with-sub', 'getWithSubDepartments');
          Route::post('/productsubdepartment', 'store');
 
+     });
+
+
+     Route::controller(ProductSpecificationDescriptionController::class)->group(function () {
+         Route::get('/product-specifications', 'index');
+     
+         Route::post('/product-specifications', 'store');
+     
      });
 
 

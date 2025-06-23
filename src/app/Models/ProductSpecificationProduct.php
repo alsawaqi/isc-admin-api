@@ -7,9 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class ProductSpecificationProduct extends Model
 {
 
-protected $table = 'Products_Specification_Product_T';
+protected $table = 'Product_Specification_Product_T';
 
-protected $gaurded = [];
+protected $guarded = [];
 
 public function header()
 {

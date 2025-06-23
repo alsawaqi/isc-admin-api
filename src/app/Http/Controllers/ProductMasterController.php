@@ -6,7 +6,9 @@ use Illuminate\Http\Request;
 use App\Models\ProductMaster;
 use App\Helpers\CodeGenerator;
 use App\Models\ProductsBarcodes;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use App\Models\ProductSpecificationProduct;
 
 class ProductMasterController extends Controller
 {
@@ -25,10 +27,14 @@ class ProductMasterController extends Controller
 
         try{
 
+        
+        DB::transaction(function () use ($request) {
+            //
        
+        
         $productMasterCode = CodeGenerator::createCode('PROD', 'Products_Master_T', 'Product_Code');
 
-       $product = ProductMaster::create([
+        $product = ProductMaster::create([
                                 'Product_Code' => $productMasterCode,
                                 'product_department_id' => $request->product_department_id,
                                 'product_sub_department_id' => $request->product_sub_department_id,
@@ -42,31 +48,42 @@ class ProductMasterController extends Controller
                                 'price' => $request->price,
                                 'stock' => $request->stock,
                                 'inhouse_barcode' => $request->inhouse_barcode,
-                                'Created_By' => Auth::id()// Optional, if using auth
-        ]);
+                                'Created_By' => Auth::id() 
+                       ]);
 
 
 
-    if ($request->has('barcodes') && is_array($request->barcodes)) {
-    foreach ($request->barcodes as $code) {
-        if (!is_string($code) || empty($code)) continue;
+           if ($request->has('barcodes') && is_array($request->barcodes)) {
+                    foreach ($request->barcodes as $code) {
+                        if (!is_string($code) || empty($code)) continue;
+
+                            $productBarCode = CodeGenerator::createCode('PRBAR', 'Products_Barcodes_T', 'product_barcode_code');
+                                ProductsBarcodes::create([
+                                                    'product_barcode_code' => $productBarCode,
+                                                    'product_id' => $product->id,
+                                                    'barcode' => $code
+                                                ]);
+                            }
+                        }
 
 
-          
 
-            $productBarCode = CodeGenerator::createCode('PRBAR', 'Products_Barcodes_T', 'product_barcode_code');
+            if ($request->has('specifications') && is_array($request->specifications)) {
+                foreach ($request->specifications as $spec) {
+                  
+              ProductSpecificationProduct::create([
+                            'product_id' => $product->id,
+                            'product_specification_description_id' => $spec['product_specification_description_id'],
+                            'value' => $spec['value']
+                        ]);
+             
+            }
+        }
 
 
-            ProductsBarcodes::create([
-                'product_barcode_code' => $productBarCode,
-                'product_id' => $product->id,
-                'barcode' => $code
-            ]);
-           }
-}
- 
-
-       return response()->json(['message' => 'Have Created Successfully'], 201);
+         
+        });
+       return response()->json(['message' => $request->specifications], 201);
 
         }catch(\Exception $e){
             return response()->json(['error' => $e], 500);
