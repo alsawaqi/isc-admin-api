@@ -5,6 +5,7 @@ use App\Models\SecurityRole;
 use Laravel\Fortify\RoutePath;
 use App\Models\SecurityPermission;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\FileController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\Auth\LoginController;
 
@@ -13,6 +14,13 @@ use App\Http\Controllers\Auth\LoginController;
 Route::get('/', function () {
      echo "Welcome to the Laravel Applications to if it works!";
 });
+
+
+Route::view('/upload-file', 'upload');
+
+
+Route::post('/upload-file', [FileController::class, 'upload'])->name('upload.file');
+
 
  
 
