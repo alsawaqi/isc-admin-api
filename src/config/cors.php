@@ -9,6 +9,7 @@ return [
     'allowed_origins' => [
         'http://localhost:82',
         'https://abdallahweb.com',
+        'https://admin.abdallahweb.com',
     ],
 
     'allowed_origins_patterns' => [],

@@ -44,6 +44,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
        Route::post('/productdepartment', 'store');
        Route::get('/sub-departments/{departmentId}' ,'getSubDepartments');
        Route::get('/sub-sub-departments/{subDepartmentId}' ,'bySubDepartment');
+       Route::delete('/productdepartment/{productdepartment}', 'destroy');
 
       
     });
@@ -87,6 +88,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
          Route::get('/productsubdepartment', 'index');
          Route::get('/product-departments-with-sub', 'getWithSubDepartments');
          Route::post('/productsubdepartment', 'store');
+         Route::delete('/productsubdepartment/{productsubdepartment}', 'destroy');
 
      });
 
