@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\ProductImages;
 use App\Models\ProductMaster;
 use App\Helpers\CodeGenerator;
 use App\Models\ProductsBarcodes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use App\Models\ProductSpecificationProduct;
 
 class ProductMasterController extends Controller
@@ -47,7 +49,7 @@ class ProductMasterController extends Controller
                                 'description' => $request->description,
                                 'price' => $request->price,
                                 'stock' => $request->stock,
-                                'inhouse_barcode' => $request->inhouse_barcode,
+                                'inhouse_barcode_source' => $request->inhouse_barcode,
                                 'Created_By' => Auth::id() 
                        ]);
 
@@ -79,6 +81,34 @@ class ProductMasterController extends Controller
              
             }
         }
+
+
+
+        if ($request->hasFile('file')) {
+            foreach ($request->file('file') as $file) {
+
+
+                $path = Storage::disk('r2')->put('Products', $file, 'public');
+
+                // Optional: save to DB or return each image info
+                $imagePath = $path;
+                $imageSize = $file->getSize();
+                $imageExtension = $file->getClientOriginalExtension();
+                $imageType = $file->getMimeType();
+
+                // Example: save to ProductImages model
+                ProductImages::create([
+                    'product_image_code' => CodeGenerator::createCode('PIMG', 'Products_Images_T', 'product_image_code'),
+                    'product_id' => $product->id,
+                    'image_path' => $imagePath,
+                    'size' => $imageSize,
+                    'extension' => $imageExtension,
+                    'type' => $imageType,
+                    'Created_By' => Auth::id()
+                ]);
+            }
+     }
+
 
 
          

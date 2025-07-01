@@ -643,7 +643,7 @@ return new class extends Migration
         Schema::create('Products_Images_T', function (Blueprint $table) {
             $table->id();
 
-            $table->string('product_image_code', 17)->unique()->nullable(); // Renamed from Product_Image_Id
+            $table->string('product_image_code', 30)->unique()->nullable(); // Renamed from Product_Image_Id
             $table->foreignId('product_id')->constrained('Products_Master_T')->onDelete('no action');
             $table->string('image_path')->nullable();
             $table->integer('size')->nullable();
