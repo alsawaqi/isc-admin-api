@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use App\Helpers\CodeGenerator;
 use App\Models\ProductDepartments;
 use Illuminate\Support\Facades\DB;
-use App\Models\ProductSubDepartment;
+use App\Models\productsubsub;
 use App\Models\ProductSubSubDepartment;
 use Illuminate\Support\Facades\Storage;
 
@@ -16,7 +16,7 @@ class ProductSubSubDepartmentController extends Controller
 
     public function index(){
         return response()->json(
-            ProductSubSubDepartment::with('productSubDepartment' ,'productSubDepartment.productDepartment')
+            ProductSubSubDepartment::with('productsubsub' ,'productsubsub.productDepartment')
                                    ->orderBy('id', 'DESC')
                                    ->get()
         );
@@ -89,11 +89,11 @@ public function store(Request $request){
                 $imageType = $file->getMimeType();
             }
 
-    $productSubDepartmentCode = CodeGenerator::createCode('SUBSUBDEPT', 'Products_Sub_Sub_Department_T', 'Product_Sub_Sub_Department_Code');
+    $productsubsubCode = CodeGenerator::createCode('SUBSUBDEPT', 'Products_Sub_Sub_Department_T', 'Product_Sub_Sub_Department_Code');
 
       
     $new = ProductSubSubDepartment::create([
-        'Product_Sub_Sub_Department_Code' => $productSubDepartmentCode,
+        'Product_Sub_Sub_Department_Code' => $productsubsubCode,
         'product_sub_department_id' => $request->product_sub_department_id,
         'name' => $request->name,
          'image_path' => $imagePath,
@@ -111,5 +111,22 @@ public function store(Request $request){
         'data' => $result
     ]);
         
+    }
+
+
+    public function destroy(ProductSubSubDepartment $productsubsub){
+        try {
+            DB::transaction(function () use ($productsubsub) {
+                // Delete the sub-sub-department
+                   if (!empty($productsubsub->image_path) && Storage::disk('r2')->exists($productsubsub->image_path)) {
+                          Storage::disk('r2')->delete($productsubsub->image_path);
+                       }
+                $productsubsub->delete();
+            });
+
+            return response()->json(['message' => 'Sub Sub Department deleted successfully'], 200);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 }

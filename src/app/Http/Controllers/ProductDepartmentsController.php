@@ -93,7 +93,7 @@ public function destroy(ProductDepartments $productdepartment){
                  DB::transaction(function () use ($productdepartment) {
                      //
 
-                     if (Storage::disk('r2')->exists($productdepartment->image_path)) {
+                     if (!empty($productdepartment->image_path) && Storage::disk('r2')->exists($productdepartment->image_path)) {
                               Storage::disk('r2')->delete($productdepartment->image_path);
                             }
 

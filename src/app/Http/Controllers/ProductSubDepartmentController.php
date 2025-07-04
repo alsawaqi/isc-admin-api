@@ -102,9 +102,9 @@ class ProductSubDepartmentController extends Controller
             // Delete related sub-sub-departments
 
 
-                   if (Storage::disk('r2')->exists($productsubdepartment->image_path)) {
+                   if (!empty($productsubdepartment->image_path) && Storage::disk('r2')->exists($productsubdepartment->image_path)) {
                               Storage::disk('r2')->delete($productsubdepartment->image_path);
-                 }
+                      }
 
 
                 $productsubdepartment->delete();

@@ -13,6 +13,19 @@ use Illuminate\Http\Request;
 
 class RolePermissionController extends Controller
 {
+
+    public function index()
+    {
+       
+        $roles = SecurityRole::select('id', 'name', 'created_at')->get();
+        return response()->json($roles);
+    }
+
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
   public function storeRole(Request $request)
 {
     $validated = $request->validate([

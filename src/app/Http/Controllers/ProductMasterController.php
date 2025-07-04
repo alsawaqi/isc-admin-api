@@ -119,4 +119,39 @@ class ProductMasterController extends Controller
             return response()->json(['error' => $e], 500);
         }
     }
+
+
+    public function destroy(ProductMaster $productmaster)
+    {
+        try {
+    DB::transaction(function () use ($productmaster) {
+        // Step 1: Get all image paths for this product
+        $images = ProductImages::where('product_id', $productmaster->id)->get();
+
+        foreach ($images as $image) {
+            // Step 2: Delete file from R2 bucket
+            if ($image->image_path) {
+                Storage::disk('r2')->delete($image->image_path);
+            }
+        }
+
+        // Step 3: Delete image DB records
+        ProductImages::where('product_id', $productmaster->id)->delete();
+
+        // Delete barcodes
+        ProductsBarcodes::where('product_id', $productmaster->id)->delete();
+
+        // Delete specifications
+        ProductSpecificationProduct::where('product_id', $productmaster->id)->delete();
+
+        // Finally, delete the product master record
+        $productmaster->delete();
+    });
+
+    return response()->json(['message' => 'Product deleted successfully'], 200);
+} catch (\Exception $e) {
+    return response()->json(['error' => $e->getMessage()], 500);
+}
+
+    }
 }

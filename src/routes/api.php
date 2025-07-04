@@ -20,10 +20,9 @@ use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
 
 Route::group(['middleware' => 'auth:sanctum'], function () {
 
+   
 
-   Route::post('/users', [UserController::class, 'store']);
-
-   Route::get('/users-with-roles', [UserController::class, 'getUsersWithRoles']);
+     
  
 
    Route::get('/user', function (Request $request) {
@@ -37,6 +36,14 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
             'permissions' => $user->getAllPermissions()->pluck('name'), // returns array of permission names
             ]);
     }); 
+
+
+     Route::controller(UserController::class)->group(function () {
+               Route::post('/users', 'store');
+               Route::get('/users-with-roles', 'getUsersWithRoles');
+
+    });
+
 
 
     Route::controller(ProductDepartmentsController::class)->group(function () {
@@ -66,7 +73,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
            Route::post('/productmaster', 'store');
            Route::get('/productmaster/{id}', 'show');
            Route::put('/productmaster/{id}', 'update');
-           Route::delete('/productmaster/{id}', 'destroy');
+           Route::delete('/productmaster/{productmaster}', 'destroy');
      
     
    });
@@ -106,24 +113,25 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
          Route::get('/full-product-department-tree', 'getFullDepartmentTree');
          Route::get('/sub-sub-departments', 'index');
          Route::post('/sub-sub-departments', 'store');
+         Route::delete('/sub-sub-departments/{productsubsub}', 'destroy');
+
+       
        
      });
      
-     Route::get('/roles/{id}/permissions', [RolePermissionController::class, 'getRolePermissions']);
-     Route::post('/roles/{id}/permissions', [RolePermissionController::class, 'updateRolePermissions']);
+    
 
     Route::controller(RolePermissionController::class)->group(function () {
+            Route::get('/roles',  'index');
             Route::post('/roles',  'storeRole');
-            
+             Route::get('/roles/{id}/permissions',  'getRolePermissions');
+            Route::put('/roles/{id}/permissions',  'updateRolePermissions');
             Route::post('/permissions',  'storePermission');
             Route::post('/assign-role',   'assignRole');     
       });
 
 
-    Route::get('/roles', function () { 
-         return SecurityRole::select('id', 'name','created_at')
-                              ->get();
-        });
+  
 
    Route::post(RoutePath::for('logout', '/logout'), [AuthenticatedSessionController::class, 'destroy']);
 });
