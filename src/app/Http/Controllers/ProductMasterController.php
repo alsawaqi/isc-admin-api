@@ -27,13 +27,9 @@ class ProductMasterController extends Controller
     public function store(Request $request)
     {
 
-        try{
+       try{
 
-        
         DB::transaction(function () use ($request) {
-            //
-       
-        
         $productMasterCode = CodeGenerator::createCode('PROD', 'Products_Master_T', 'Product_Code');
 
         $product = ProductMaster::create([
@@ -70,16 +66,24 @@ class ProductMasterController extends Controller
 
 
 
-            if ($request->has('specifications') && is_array($request->specifications)) {
-                foreach ($request->specifications as $spec) {
-                  
-              ProductSpecificationProduct::create([
-                            'product_id' => $product->id,
-                            'product_specification_description_id' => $spec['product_specification_description_id'],
-                            'value' => $spec['value']
-                        ]);
-             
-            }
+                       
+
+            if ($request->has('specifications')) {
+
+
+                        $specifications = json_decode($request->specifications);
+
+                        foreach ($specifications as $spec) {
+                
+                            ProductSpecificationProduct::create([
+                                            'product_id' => $product->id,
+                                            'product_specification_description_id' => $spec->product_specification_description_id,
+                                            'value' => $spec->value
+                                        ]);
+                        }
+
+
+               
         }
 
 
@@ -107,7 +111,7 @@ class ProductMasterController extends Controller
                     'Created_By' => Auth::id()
                 ]);
             }
-     }
+       }
 
 
 
