@@ -93,13 +93,14 @@ public function store(Request $request){
 
       
     $new = ProductSubSubDepartment::create([
-        'Product_Sub_Sub_Department_Code' => $productsubsubCode,
-        'product_sub_department_id' => $request->product_sub_department_id,
-        'name' => $request->name,
-         'image_path' => $imagePath,
-                    'size' => $imageSize,
-                    'extension' => $imageExtension,
-                    'type' => $imageType,
+                                        'Product_Sub_Sub_Department_Code' => $productsubsubCode,
+                                        'product_sub_department_id' => $request->product_sub_department_id,
+                                        'description' => $request->description,
+                                        'name' => $request->name,
+                                        'image_path' => $imagePath,
+                                        'size' => $imageSize,
+                                        'extension' => $imageExtension,
+                                        'type' => $imageType,
          
     ]);
 
