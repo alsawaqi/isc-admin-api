@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\ProductImages;
 use App\Models\ProductMaster;
 use App\Helpers\CodeGenerator;
+use Sentry\State\HubInterface;
 use App\Models\ProductsBarcodes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -52,6 +53,8 @@ class ProductMasterController extends Controller
 
 
            if ($request->has('barcodes') && is_array($request->barcodes)) {
+                
+        
                     foreach ($request->barcodes as $code) {
                         if (!is_string($code) || empty($code)) continue;
 
@@ -113,14 +116,15 @@ class ProductMasterController extends Controller
             }
        }
 
+     });
 
 
-         
-        });
        return response()->json(['message' => $request->specifications], 201);
 
         }catch(\Exception $e){
-            return response()->json(['error' => $e], 500);
+             app(HubInterface::class)->captureException($e);
+
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
