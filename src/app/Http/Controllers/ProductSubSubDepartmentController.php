@@ -59,15 +59,15 @@ public function getFullDepartmentTree(){
 
 public function store(Request $request){
 
-     
-    
-    
-
-        $request->validate([
-        'product_sub_department_id' => 'required|exists:Products_Sub_Department_T,id',
-        'name' => 'required|string|max:255',
+     $request->validate([
+            'product_sub_department_id' => 'required|exists:Products_Sub_Department_T,id',
+            'name' => 'required|string|max:255',
          ]);
   
+
+         try{
+
+         
          
      $result = DB::transaction(function () use ($request) {
             
@@ -106,6 +106,10 @@ public function store(Request $request){
 
 
      });
+
+     }catch(\Exception $e){
+            return response()->json(['error' => $e->getMessage()], 500);
+         }
 
     return response()->json([
         'message' => 'Sub Sub Department created successfully',
