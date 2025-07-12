@@ -16,7 +16,7 @@ class UserController extends Controller
     public function store(Request $request){
 
 
-     $productDepartmentCode = CodeGenerator::createCode('USR', 'Secx_Admin_User_Master_T', 'User_Id');
+     $UserCode = CodeGenerator::createCode('USR', 'Secx_Admin_User_Master_T', 'User_Id');
 
 
     $validated = $request->validate([
@@ -34,7 +34,7 @@ class UserController extends Controller
    
 
          $user = User::create([
-                'User_Id'=> $productDepartmentCode,
+                'User_Id'=> $UserCode,
                 'User_Name' => $request->User_Name,
                 'email' => $validated['email'],
                 'password' => Hash::make($request->password),
@@ -48,7 +48,7 @@ class UserController extends Controller
 
             DB::table('Security_Model_Has_Roles_T')->insert([
                 'role_id'    => $roleId,
-                'model_type' => \App\Models\User::class,
+                'model_type' => User::class,
                 'model_id'   => $user->id,
             ]);
          return response()->json(['message' => 'User created successfully'], 201);

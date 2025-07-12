@@ -39,10 +39,7 @@ class ProductDepartmentsController extends Controller
  
 public function store(Request $request){
        try{
-
-      
-
-            // Validate the request
+        // Validate the request
         $request->validate([
                 'name' => 'required|string|max:255',
              
