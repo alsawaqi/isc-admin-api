@@ -48,7 +48,7 @@ class UserController extends Controller
 
             DB::table('Security_Model_Has_Roles_T')->insert([
                 'role_id'    => $roleId,
-                'model_type' => User::class,
+                'model_type' => \App\Models\User::class,
                 'model_id'   => $user->id,
             ]);
          return response()->json(['message' => 'User created successfully'], 201);
