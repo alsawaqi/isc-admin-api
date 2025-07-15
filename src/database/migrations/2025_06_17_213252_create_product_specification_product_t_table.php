@@ -14,8 +14,8 @@ return new class extends Migration
         Schema::create('Product_Specification_Product_T', function (Blueprint $table) {
             $table->id();
             $table->foreignId('product_id')
-                ->constrained('Products_Master_T')
-                ->onDelete('cascade');
+                  ->constrained('Products_Master_T')
+                  ->onDelete('cascade');
             $table->foreignId('product_specification_description_id')
                 ->constrained('product_specification_description_t')
                 ->onDelete('cascade');
