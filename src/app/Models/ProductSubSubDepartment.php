@@ -20,8 +20,8 @@ class ProductSubSubDepartment extends Model
     public function sluggable(): array
     {
         return [
-            'slug' => [
-                'source' => 'name'
+            'Slug' => [
+                'source' => 'Product_Sub_Sub_Department_Name'
             ]
         ];
     }

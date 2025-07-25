@@ -13,13 +13,17 @@ return new class extends Migration
     {
         Schema::create('Product_Specification_Product_T', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('product_id')
+            $table->foreignId('Product_Id')
                   ->constrained('Products_Master_T')
                   ->onDelete('cascade');
-            $table->foreignId('product_specification_description_id')
-                ->constrained('product_specification_description_t')
+            $table->foreignId('Product_Specification_Description_Id')
+                ->constrained('Product_Specification_Description_T')
                 ->onDelete('cascade');
             $table->string('value'); // e.g., 'Large', 'Red'
+            $table->foreignId('Created_By', 12)
+            ->constrained('Secx_Admin_User_Master_T')
+            ->onDelete('no action')
+            ->nullable();
             $table->timestamps();
         });
     }

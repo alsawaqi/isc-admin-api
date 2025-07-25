@@ -13,6 +13,6 @@ class ProductDepartments extends Model
 
 
    public function subDepartments(){
-        return $this->hasMany(ProductSubDepartment::class, 'product_department_id', 'id');
+        return $this->hasMany(ProductSubDepartment::class, 'Products_Departments_Id', 'id');
     }
 }

@@ -12,7 +12,7 @@ class ProductManufactureController extends Controller
 
     public function index()
     {
-       return response()->json(ProductManufacture::orderBy('id', 'DESC')->get());
+       return response()->json(ProductManufacture::with('department')->orderBy('id', 'DESC')->get());
     }
     public function store(Request $request)
     {
@@ -20,8 +20,10 @@ class ProductManufactureController extends Controller
 
         ProductManufacture::create([
             'Product_Manufacture_Code' => $productManufactureCode,
-            'name' => $request->name,
-            'Department' => $request->department
+            'Products_Manufacture_Name' => $request->name,
+            'Products_Manufacture_Name_Ar' => $request->name,
+            'Product_Department_Id' => $request->product_department_id,
+           
         ]);
 
         return response()->json(['message' => 'Product manufacture created successfully'], 201);

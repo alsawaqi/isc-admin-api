@@ -12,17 +12,17 @@ class ProductSubDepartment extends Model
 
     public function productDepartment()
     {
-        return $this->belongsTo(ProductDepartments::class, 'product_department_id');
+        return $this->belongsTo(ProductDepartments::class, 'Products_Departments_Id');
     }
 
     public function subSubDepartments()
     {
-        return $this->hasMany(ProductSubSubDepartment::class, 'product_sub_department_id', 'id');
+        return $this->hasMany(ProductSubSubDepartment::class, 'Product_Sub_Department_Id', 'id');
     }
 
 
     public function department()
         {
-            return $this->belongsTo(ProductDepartments::class, 'product_department_id', 'id');
+            return $this->belongsTo(ProductDepartments::class, 'Products_Departments_Id', 'id');
         }
 }

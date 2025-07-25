@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\ProductSpecificationDescription;
+use Illuminate\Container\Attributes\Auth;
 
 class ProductSpecificationDescriptionController extends Controller
 {
@@ -13,9 +14,9 @@ public function index(Request $request)
     {
         return response()->json(
             ProductSpecificationDescription::with('subSubDepartment')
-                ->where('product_sub_sub_department_id', $request->product_sub_sub_department_id)
-                ->orderBy('id', 'DESC')
-                ->get()
+                                            ->where('product_sub_sub_department_id', $request->product_sub_sub_department_id)
+                                            ->orderBy('id', 'DESC')
+                                            ->get()
         );
     }
 
@@ -27,14 +28,15 @@ public function store(Request $request)
     'specifications' => 'required|array',
     'specifications.*' => 'required|string',
     'sub_sub_category_id' => 'required|integer|exists:Products_Sub_Sub_Department_T,id',
-]);
+   ]);
 
 $data = [];
 
 foreach ($request->specifications as $spec) {
     $data[] = [
-        'name' => $spec,
+        'Product_Specification_Description_Name' => $spec,
         'product_sub_sub_department_id' => $request->sub_sub_category_id,
+        'Created_By' => $request->user()->id,
         'created_at' => now(),
         'updated_at' => now(),
     ];

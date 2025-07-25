@@ -8,12 +8,15 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\ProductTypesController;
 use App\Http\Controllers\AuthenticatedController;
 use App\Http\Controllers\ProductBrandsController;
+use App\Http\Controllers\ProductImagesController;
 use App\Http\Controllers\ProductMasterController;
 use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\ProductsBarcodesController;
 use App\Http\Controllers\ProductDepartmentsController;
 use App\Http\Controllers\ProductManufactureController;
 use App\Http\Controllers\ProductSubDepartmentController;
 use App\Http\Controllers\ProductSubSubDepartmentController;
+use App\Http\Controllers\ProductSpecificationProductController;
 use App\Http\Controllers\ProductSpecificationDescriptionController;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
  
@@ -67,9 +70,24 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     });
 
 
+    Route::controller(ProductsBarcodesController::class)->group(function () {
+          Route::get('/productmaster/{id}/barcodes','getProductBarcodes');
+         Route::post('/productmaster/{id}/barcodes', 'updateProductBarcodes');
+
+    });  
+
+
+    Route::controller(ProductImagesController::class)->group(function () {
+        Route::post('/product-images/{product}', 'uploadImages');
+        Route::get('/product-images/{product}', 'getImages');
+
+    });
+
+
     Route::controller(ProductMasterController::class)->group(function () {
   
            Route::get('/productmaster', 'index');
+           Route::get('/latest-products', 'getLatestProducts');
            Route::post('/productmaster', 'store');
            Route::get('/productmaster/{id}', 'show');
            Route::put('/productmaster/{id}', 'update');
@@ -77,6 +95,16 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
      
     
    });
+
+
+      Route::controller(ProductSpecificationProductController::class)->group(function () {
+ 
+         
+            Route::post('/product-specifications-update', 'storeOrUpdate');
+            Route::post('/product-specification-products', 'store');
+            Route::get('/product-specifications/{product}', 'getProductSpecificationsForEdit');
+ 
+      });
 
     Route::controller(ProductManufactureController::class)->group(function () {
          Route::get('/productmanufacture', 'index');
@@ -136,5 +164,5 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
    Route::post(RoutePath::for('logout', '/logout'), [AuthenticatedSessionController::class, 'destroy']);
 });
 
-Route::post('/login', [AuthenticatedController::class, 'store']);
+Route::post('/login', [UserController::class, 'login']);
 

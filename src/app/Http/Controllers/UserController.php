@@ -12,6 +12,32 @@ use Illuminate\Support\Facades\DB;
 
 class UserController extends Controller
 {
+
+
+    public function login(Request $request)
+    {
+        // Validate input
+        $credentials = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        // Find the user (adjust column name if needed)
+        $user = User::where('Email', $credentials['email'])->first();
+
+        if (!$user || !Hash::check($credentials['password'], $user->Password)) {
+            return response()->json(['message' => 'Invalid credentials'], 401);
+        }
+
+        // Generate token (optional, if using Sanctum or Passport)
+        $token = $user->createToken('user-token')->plainTextToken;
+
+        return response()->json([
+            'message' => 'Login successful',
+            'token' => $token,
+            'user' => $user ,
+        ]);
+    }
     
     public function store(Request $request){
 
@@ -21,7 +47,7 @@ class UserController extends Controller
 
     $validated = $request->validate([
         'User_Name' => 'required|string|max:255',
-        'email' => 'required|email|unique:Secx_Admin_User_Master_T,email',
+        'Email' => 'required|email|unique:Secx_Admin_User_Master_T,email',
        // 'password' => 'required|string|min:6|confirmed',
        
     ]);
@@ -36,8 +62,8 @@ class UserController extends Controller
          $user = User::create([
                 'User_Id'=> $UserCode,
                 'User_Name' => $request->User_Name,
-                'email' => $validated['email'],
-                'password' => Hash::make($request->password),
+                'Email' => $validated['email'],
+                'Password' => Hash::make($request->password),
          ]);
 
          $roleId = SecurityRole::where('name', $request->role)->value('id');

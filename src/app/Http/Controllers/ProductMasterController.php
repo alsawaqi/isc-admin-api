@@ -21,117 +21,131 @@ class ProductMasterController extends Controller
     public function index()
     {
         return response()->json(
-            ProductMaster::select('id','name','price','created_at')->orderBy('id', 'DESC')->get()
+            ProductMaster::orderBy('id', 'DESC')->get()
         );
+    }
+
+
+    public function getLatestProducts()
+    {
+        return response()->json(ProductMaster::latest('id')->value('id'));
     }
 
     public function store(Request $request)
     {
+ 
+      try{
 
-       try{
+         $product = null;
 
-        DB::transaction(function () use ($request) {
-        $productMasterCode = CodeGenerator::createCode('PROD', 'Products_Master_T', 'Product_Code');
+            DB::transaction(function () use ($request, &$product) {
 
-        $product = ProductMaster::create([
-                                'Product_Code' => $productMasterCode,
-                                'product_department_id' => $request->product_department_id,
-                                'product_sub_department_id' => $request->product_sub_department_id,
-                                'product_sub_sub_department_id' => $request->product_sub_sub_department_id,
-                                'product_type_id' => $request->product_type_id,
-                                'product_brand_id' => $request->product_brand_id,
-                                'product_manufacture_id' => $request->product_manufacture_id,
-                                'name' => $request->name,
-                                'name_ar' => $request->name_ar,
-                                'description' => $request->description,
-                                'price' => $request->price,
-                                'stock' => $request->stock,
-                                'inhouse_barcode_source' => $request->inhouse_barcode,
-                                'Created_By' => Auth::id() 
-                       ]);
+                    $productMasterCode = CodeGenerator::createCode('PROD', 'Products_Master_T', 'Product_Code');
+
+                   
+
+                    $productBrandId = $request->input('product_brand_id');
+                    $productBrandId = $productBrandId === '' ? null : $productBrandId;
+
+                    $product_manufacture_id = $request->input('product_manufacture_id');
+                    $product_manufacture_id = $product_manufacture_id === '' ? null : $product_manufacture_id;
+
+                    $product = ProductMaster::create([
+                                            'Product_Code' => $productMasterCode,
+                                            'Product_Department_Id' => $request->product_department_id,
+                                            'Product_Sub_Department_Id' => $request->product_sub_department_id,
+                                            'Product_Sub_Sub_Department_Id' => $request->product_sub_sub_department_id,
+                                            'Product_Type_Id' => $request->product_type_id,
+                                            'Product_Brand_Id' => $productBrandId,
+                                            'Product_Manufacture_Id' => $product_manufacture_id,
+                                            'Product_Name' => $request->name,
+                                            'Product_Name_Ar' => $request->name_ar,
+                                            'Product_Description' => $request->description,
+                                            'Product_Price' => $request->price,
+                                            'Product_Stock' => $request->stock,
+                                         
+                                            'Created_By' => Auth::id(),
+                                            'Created_Date' => now(),
+                                ]);
+
+
+                             $inhouseBarcode = $product->id.'-'.$request->input('inhouse_barcode');
+
+
+                            $product->update([
+                                'Inhouse_Barcode' => $inhouseBarcode,
+                            ]);
 
 
 
-           if ($request->has('barcodes') && is_array($request->barcodes)) {
-                
-        
-                    foreach ($request->barcodes as $code) {
-                        if (!is_string($code) || empty($code)) continue;
+                        $barcodes = json_decode($request->barcodes, true); // true = associative array
 
-                            $productBarCode = CodeGenerator::createCode('PRBAR', 'Products_Barcodes_T', 'product_barcode_code');
-                                ProductsBarcodes::create([
-                                                    'product_barcode_code' => $productBarCode,
-                                                    'product_id' => $product->id,
-                                                    'barcode' => $code
-                                                ]);
+                       if (is_array($barcodes)) {
+                                foreach ($barcodes as $code) {
+                                    if (!is_string($code) || empty($code)) continue;
+
+                                    $productBarCode = CodeGenerator::createCode('PRBAR', 'Product_Supplier_BarCode_T', 'Product_Barcode_Code');
+
+                                    ProductsBarcodes::create([
+                                        'Product_Barcode_Code' => $productBarCode,
+                                        'Products_Id' => $product->id,
+                                        'Supplier_Barcode' => $code,
+                                        'Created_By' => Auth::id(),
+                                        'Created_Date' => now(),
+                                    ]);
+                                }
                             }
+
+
+
+
+                    if ($request->hasFile('file')) {
+                        foreach ($request->file('file') as $file) {
+
+
+                            $path = Storage::disk('r2')->put('Products', $file, 'public');
+
+                        
+                            $imagePath = $path;
+                            $imageSize = $file->getSize();
+                            $imageExtension = $file->getClientOriginalExtension();
+                            $imageType = $file->getMimeType();
+
+                            // Example: save to ProductImages model
+                            ProductImages::create([
+                                'Product_Image_Code' => CodeGenerator::createCode('PIMG', 'Products_Images_T', 'Product_Image_Code'),
+                                'Products_Id' => $product->id,
+                                'Image_Path' => $imagePath,
+                                'Image_Size' => $imageSize,
+                                'Image_Extension' => $imageExtension,
+                                'Image_Type' => $imageType,
+                                'Created_By' => Auth::id(),
+                                'Created_Date' => now()
+                            ]);
                         }
+                    }
 
+                                
+  
 
+            });
 
-                       
+           return response()->json(['data' => $product], 201);
 
-            if ($request->has('specifications')) {
+         }catch(\Exception $e){
 
+                app(HubInterface::class)->captureException($e);
+               return response()->json(['error' => $e->getMessage()], 500);
+         }
 
-                        $specifications = json_decode($request->specifications);
-
-                        foreach ($specifications as $spec) {
-                
-                            ProductSpecificationProduct::create([
-                                            'product_id' => $product->id,
-                                            'product_specification_description_id' => $spec->product_specification_description_id,
-                                            'value' => $spec->value
-                                        ]);
-                        }
-
-
-               
+          
         }
-
-
-
-        if ($request->hasFile('file')) {
-            foreach ($request->file('file') as $file) {
-
-
-                $path = Storage::disk('r2')->put('Products', $file, 'public');
-
-                // Optional: save to DB or return each image info
-                $imagePath = $path;
-                $imageSize = $file->getSize();
-                $imageExtension = $file->getClientOriginalExtension();
-                $imageType = $file->getMimeType();
-
-                // Example: save to ProductImages model
-                ProductImages::create([
-                    'product_image_code' => CodeGenerator::createCode('PIMG', 'Products_Images_T', 'product_image_code'),
-                    'product_id' => $product->id,
-                    'image_path' => $imagePath,
-                    'size' => $imageSize,
-                    'extension' => $imageExtension,
-                    'type' => $imageType,
-                    'Created_By' => Auth::id()
-                ]);
-            }
-       }
-
-     });
-
-
-       return response()->json(['message' => $request->specifications], 201);
-
-        }catch(\Exception $e){
-             app(HubInterface::class)->captureException($e);
-
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    }
 
 
     public function destroy(ProductMaster $productmaster)
     {
         try {
+           
     DB::transaction(function () use ($productmaster) {
         // Step 1: Get all image paths for this product
         $images = ProductImages::where('product_id', $productmaster->id)->get();

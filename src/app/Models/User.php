@@ -25,9 +25,8 @@ class User extends Authenticatable
     protected $fillable = [
         'User_Id',
         'User_Name',
-        'name',
-        'email',
-        'password',
+        'Email',
+        'Password',
     ];
 
     /**
@@ -39,6 +38,12 @@ class User extends Authenticatable
         'password',
         'remember_token',
     ];
+
+
+    public function scopeFindByEmail($query, $value)
+{
+    return $query->where('Email', $value);
+}
 
 
    

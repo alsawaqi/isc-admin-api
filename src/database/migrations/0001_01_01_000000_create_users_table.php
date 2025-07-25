@@ -16,9 +16,9 @@ return new class extends Migration
             $table->id();
             $table->string('User_Id', 30);
             $table->string('User_Name', 150)->nullable();
-            $table->string('email')->unique()->nullable(); // Laravel default
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password'); // Laravel default
+            $table->string('Email')->unique()->nullable(); // Laravel default
+            $table->timestamp('Email_verified_at')->nullable();
+            $table->string('Password'); // Laravel default
             $table->rememberToken()->nullable();
             $table->string('Login_Password', 100)->nullable(); // Renamed from Password
             $table->string('Merchant_Id', 12)->nullable();
@@ -53,9 +53,9 @@ return new class extends Migration
             $table->id();
             $table->string('User_Id', 30);
             $table->string('User_Name', 150)->nullable();
-            $table->string('email')->unique(); // Laravel default
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password')->nullable(); // Laravel default
+            $table->string('Email')->unique(); // Laravel default
+            $table->timestamp('Email_Verified_At')->nullable();
+            $table->string('Password')->nullable(); // Laravel default
             $table->rememberToken()->nullable();
             $table->string('Login_Password', 100)->nullable(); // Renamed from Password
             $table->string('Merchant_Id', 12)->nullable();

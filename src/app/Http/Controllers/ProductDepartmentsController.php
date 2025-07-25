@@ -25,7 +25,7 @@ class ProductDepartmentsController extends Controller
 
  public function getSubDepartments($departmentId)
  {
-    $subDepartments = ProductSubDepartment::where('product_department_id', $departmentId)->get();
+    $subDepartments = ProductSubDepartment::where('Products_Departments_Id', $departmentId)->get();
 
     return response()->json([
         'sub_departments' => $subDepartments
@@ -33,7 +33,7 @@ class ProductDepartmentsController extends Controller
  }
 
  public function bySubDepartment($subDepartmentId){
-    $subSubDepartments = ProductSubSubDepartment::where('product_sub_department_id', $subDepartmentId)->get();
+    $subSubDepartments = ProductSubSubDepartment::where('Product_Sub_Department_Id', $subDepartmentId)->get();
     return response()->json($subSubDepartments);
 }
  
@@ -65,10 +65,10 @@ public function store(Request $request){
             ProductDepartments::create([
                     'Product_Department_Code' => $productDepartmentCode,
                     'Product_Department_Name' => $request->name,
-                    'image_path' => $imagePath,
-                    'size' => $imageSize,
-                    'extension' => $imageExtension,
-                    'type' => $imageType,
+                    'Image_path' => $imagePath,
+                    'Image_Size' => $imageSize,
+                    'Image_Extension' => $imageExtension,
+                    'Image_Type' => $imageType,
                     'Created_By' => $request->user()->id,
                     ]);
 

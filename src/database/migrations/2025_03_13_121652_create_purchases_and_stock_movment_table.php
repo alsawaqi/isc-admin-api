@@ -14,34 +14,34 @@ return new class extends Migration
          // Suppliers Table
          Schema::create('Procurement_Suppliers_T', function (Blueprint $table) {
             $table->id();
-            $table->string('supplier_code')->unique()->nullable();
-            $table->string('name');
-            $table->string('email')->unique()->nullable();
-            $table->string('phone')->unique();
-            $table->text('address')->nullable();
+            $table->string('Supplier_Code')->unique()->nullable();
+            $table->string('Name');
+            $table->string('Email')->unique()->nullable();
+            $table->string('Phone')->unique();
+            $table->text('Address')->nullable();
             $table->timestamps();
         });
 
         // Purchases Table
         Schema::create('Procurement_Purchases_T', function (Blueprint $table) {
             $table->id();
-            $table->string('purchase_code')->unique()->nullable();
-            $table->foreignId('supplier_id')->constrained('Procurement_Suppliers_T')->onDelete('no action');
-            $table->foreignId('product_id')->constrained('products_master_t')->onDelete('no action');
-            $table->integer('quantity');
-            $table->decimal('purchase_price', 10, 2);
-            $table->date('purchase_date');
+            $table->string('Purchase_Code')->unique()->nullable();
+            $table->foreignId('Supplier_Id')->constrained('Procurement_Suppliers_T')->onDelete('no action');
+            $table->foreignId('Product_Id')->constrained('products_master_t')->onDelete('no action');
+            $table->integer('Quantity');
+            $table->decimal('Purchase_Price', 10, 2);
+            $table->date('Purchase_Date');
             $table->timestamps();
         });
 
         // Stock Movements Table
         Schema::create('Procurement_Stock_Movements_T', function (Blueprint $table) {
             $table->id();
-            $table->string('movement_code')->unique()->nullable();
-            $table->foreignId('product_id')->constrained('products_master_t')->onDelete('no action');
-            $table->enum('movement_type', ['purchase', 'sale', 'return', 'adjustment']);
-            $table->integer('quantity');
-            $table->text('remarks')->nullable();
+            $table->string('Movement_Code')->unique()->nullable();
+            $table->foreignId('Product_Id')->constrained('products_master_t')->onDelete('no action');
+            $table->enum('Movement_Type', ['purchase', 'sale', 'return', 'adjustment']);
+            $table->integer('Quantity');
+            $table->text('Remarks')->nullable();
             $table->timestamps();
         });
     }

@@ -19,8 +19,8 @@ class ProductMaster extends Model
      public function sluggable(): array
     {
         return [
-            'slug' => [
-                'source' => 'name'
+            'Slug' => [
+                'source' => 'Product_Name'
             ]
         ];
     }

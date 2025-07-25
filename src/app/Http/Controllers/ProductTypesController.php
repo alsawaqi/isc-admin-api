@@ -25,7 +25,9 @@ class ProductTypesController extends Controller
         
         ProductTypes::create([
            'Product_Types_Code' => $pt_code,
-            'name' => $request->name,
+            'Product_Types_Name' => $request->name,
+            'Created_By' => $request->user()->id,
+            'Created_Date' => now(),
         ]);
 
         return response()->json(['message' => 'Product type created successfully', 'data' => ''], 201);

@@ -27,35 +27,20 @@ class ProductSubDepartmentController extends Controller
         public function getWithSubDepartments()
     {
         $departments = ProductDepartments::with(['subDepartments' => function ($query) {
-            $query->select(
-                'id',
-                'Product_Sub_Department_Code',
-                'product_department_id',
-                'name',
-                'description',
-                'image_path',
-                'size',
-                'extension',
-                'type',
-                'created_at',
-                'updated_at'
-            );
-        }])->select(
-            'id',
-            'Product_Department_Code',
-            'Product_Department_Name',
-            'Product_Department_Name_Ar',
-            'Touch_Screen_Status',
-            'Stock_Control_Status',
-            'image_path',
-            'size',
-            'extension',
-            'type',
-            'updated_status',
-            'Created_By',
-            'created_at',
-            'updated_at'
-        )->get();
+                                                    $query->select(
+                                                        'id',
+                                                        'Products_Departments_Id',
+                                                        'Sub_Department_Name',
+                                                        'Image_path',
+                                                      );
+                                                }])->select(
+                                                    'id',
+                                                    'Product_Department_Code',
+                                                    'Product_Department_Name',
+                                                    
+                                                    'created_at',
+                                                    'updated_at'
+                                                )->get();
 
         return response()->json($departments);
     }
@@ -78,18 +63,19 @@ class ProductSubDepartmentController extends Controller
                 $imageType = $file->getMimeType();
             }
 
-        $productSubDepartmentCode = CodeGenerator::createCode('SUBDEPT', 'Products_Sub_Department_T', 'Product_Sub_Department_Code');
+        $productSubDepartmentCode = CodeGenerator::createCode('SUBDEPT', 'Products_Sub_Department_T', 'Products_Sub_Department_Code');
 
         ProductSubDepartment::create([
-            'Product_Sub_Department_Code' => $productSubDepartmentCode,
-            'product_department_id' => $request->product_department_id,
-            'name' => $request->name,
-            'image_path' => $imagePath,
-                    'size' => $imageSize,
-                    'extension' => $imageExtension,
-                    'type' => $imageType,
-         
-        ]);
+            'Products_Departments_Id' => $request->product_department_id,
+            'Products_Sub_Department_Code' => $productSubDepartmentCode,
+            'Sub_Department_Name' => $request->name,
+            'Sub_Department_Name_Ar' => $request->name,
+            'Image_path' => $imagePath,
+            'Image_Size' => $imageSize,
+            'Image_Extension' => $imageExtension,
+            'Image_Type' => $imageType,
+            'Created_By' => $request->user()->id,
+         ]);
     }
 
 

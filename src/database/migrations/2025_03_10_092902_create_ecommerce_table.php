@@ -1,8 +1,9 @@
 <?php
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Migrations\Migration;
 
 return new class extends Migration
 {
@@ -25,6 +26,7 @@ return new class extends Migration
                    ->constrained('Secx_Admin_User_Master_T')
                    ->onDelete('no action')
                    ->nullable();
+           $table->dateTime('Created_Date')->nullable();        
            $table->timestamps();
 
 
@@ -36,23 +38,19 @@ return new class extends Migration
 
             $table->id();
             $table->string('Region_Code', 30)->unique()->nullable();
-            $table->string('Country_Code', 5)->nullable();
-
             $table->foreignId('Country_Id', 12)
-            ->constrained('Geox_Country_Master_T')
-            ->onDelete('no action')
-            ->nullable();
+                   ->constrained('Geox_Country_Master_T')
+                   ->onDelete('no action')
+                   ->nullable();
             $table->string('Region_Name', 50)->nullable();
             $table->string('Region_Name_Ar', 50)->nullable();
-           $table->char('Updated_Status')->nullable();
-
             $table->foreignId('Created_By', 12)
                    ->constrained('Secx_Admin_User_Master_T')
                    ->onDelete('no action')
-                   ->nullable();
-
-
-           $table->timestamps();
+                   ->nullable(); 
+            $table->char('Updated_Status')->nullable();
+            $table->dateTime('Created_Date')->nullable();
+            $table->timestamps();
 
 
 
@@ -80,7 +78,7 @@ return new class extends Migration
                    ->onDelete('no action')
                    ->nullable();
 
-
+           $table->dateTime('Created_Date')->nullable();
            $table->timestamps();
 
 
@@ -115,7 +113,7 @@ return new class extends Migration
                    ->onDelete('no action')
                    ->nullable();
 
-
+           $table->dateTime('Created_Date')->nullable();
            $table->timestamps();
 
 
@@ -144,7 +142,7 @@ return new class extends Migration
             ->constrained('Secx_Admin_User_Master_T')
             ->onDelete('no action')
             ->nullable();
-
+            $table->dateTime('Created_Date')->nullable();
             $table->timestamps();
 
 
@@ -173,7 +171,7 @@ return new class extends Migration
             ->constrained('Secx_Admin_User_Master_T')
             ->onDelete('no action')
             ->nullable();
-
+            $table->dateTime('Created_Date')->nullable();
             $table->timestamps();
 
 
@@ -195,15 +193,15 @@ return new class extends Migration
 
             $table->string('Location_Name', 50)->nullable();
             $table->string('Location_Name_Ar', 50)->nullable();
-
-
             $table->char('Updated_Status')->nullable();
+
+            
 
             $table->foreignId('Created_By', 12)
             ->constrained('Secx_Admin_User_Master_T')
             ->onDelete('no action')
             ->nullable();
-
+            $table->dateTime('Created_Date')->nullable();
             $table->timestamps();
 
         });
@@ -216,6 +214,12 @@ return new class extends Migration
             $table->string('Company_Type_Code', 30)->unique()->nullable();
             $table->string('Name',50);
             $table->string('Description',50)->nullable();
+            $table->foreignId('Created_By', 12)
+            ->constrained('Secx_Admin_User_Master_T')
+            ->onDelete('no action')
+            ->nullable();
+            $table->dateTime('Created_Date')->nullable();
+            $table->char('Updated_Status', 1)->nullable();
             $table->timestamps();
 
 
@@ -245,7 +249,10 @@ return new class extends Migration
             $table->string('Telephone', 30)->nullable();
             $table->string('Fax', 30)->nullable();
             $table->string('Email', 100)->nullable();
-            $table->string('User_Id', 12)->nullable();
+            $table->foreignId('Created_By', 12)
+            ->constrained('Secx_Admin_User_Master_T')
+            ->onDelete('no action')
+            ->nullable();
             $table->dateTime('Created_Date')->nullable();
             $table->char('Updated_Status', 1)->nullable();
             $table->timestamps();
@@ -257,13 +264,13 @@ return new class extends Migration
         Schema::create('Company_Contacts_T', function (Blueprint $table) {
             $table->id();
             $table->string('Company_Contact_Code', 30)->unique()->nullable(); // Renamed from Customer_Contact_Id
-            $table->enum('Type', ['physical', 'shipping'])->nullable();
+            $table->enum('Type', ['physical', 'shipping','billing'])->nullable();
 
             // Adjusted to refer to your correct main customer table (assuming 'Customers_Master_T')
-            $table->foreignId('company_id')->nullable()->constrained('Company_Master_T')->onDelete('no action');
+            $table->foreignId('Company_Id')->nullable()->constrained('Company_Master_T')->onDelete('no action');
 
             $table->string('Customer_Code', 12)->nullable(); // Renamed from Customer_Id
-            $table->string('customer_contact_code', 12)->nullable(); // Renamed from Customer_Contact_Id
+            $table->string('Customer_Contact_Code', 12)->nullable(); // Renamed from Customer_Contact_Id
 
             $table->text('Address')->nullable();
 
@@ -289,16 +296,21 @@ return new class extends Migration
             $table->string('Phone')->nullable();
 
             // Added from MSSQL structure with renamed fields to avoid conflict
-            $table->string('contact_person_name', 150)->nullable();
-            $table->string('telephone', 30)->nullable();
-            $table->string('fax', 30)->nullable();
-            $table->string('gsm', 30)->nullable();
-            $table->string('email_address', 50)->nullable(); // Renamed from Email
-            $table->string('designation', 50)->nullable();
-            $table->string('remarks', 200)->nullable();
-            $table->string('contact_user_code', 12)->nullable(); // Renamed from User_Id
-            $table->dateTime('created_date')->nullable();
-            $table->char('updated_status', 1)->nullable();
+            $table->string('Contact_Person_Name', 150)->nullable();
+            $table->string('Telephone', 30)->nullable();
+            $table->string('Fax', 30)->nullable();
+            $table->string('Gsm', 30)->nullable();
+            $table->string('Email_Address', 50)->nullable(); // Renamed from Email
+            $table->string('Designation', 50)->nullable();
+            $table->string('Remarks', 200)->nullable();
+            $table->string('Contact_User_Code', 12)->nullable(); // Renamed from User_Id
+           $table->char('Updated_Status')->nullable();
+
+            $table->foreignId('Created_By', 12)
+            ->constrained('Secx_Admin_User_Master_T')
+            ->onDelete('no action')
+            ->nullable();
+            $table->dateTime('Created_Date')->nullable();
             $table->timestamps();
 
         });
@@ -326,8 +338,18 @@ return new class extends Migration
          Schema::create('Customers_Master_T', function (Blueprint $table) {
             $table->id();
             $table->string('Customer_Code', 30)->unique()->nullable(); // Renamed from Customer_Id
-            $table->foreignId('Customer_Type_Id')->constrained('Customers_Types_Master_T')->onDelete('no action');
-            $table->foreignId('User_Id')->constrained('Secx_User_Master_T')->onDelete('no action');
+
+            
+
+            $table->foreignId('Customer_Type_Id')
+                  ->constrained('Customers_Types_Master_T')
+                  ->nullable()
+                  ->onDelete('no action');
+                  
+            $table->foreignId('User_Id')
+                  ->constrained('Secx_User_Master_T')
+                  ->onDelete('no action');
+
             $table->string('Customer_Id', 12)->nullable(); // Renamed from Customer_Id
             $table->string('Customer_Full_Name', 150)->nullable(); // Renamed from Customer_Name
             $table->integer('Customer_Type_Code')->nullable();
@@ -336,30 +358,20 @@ return new class extends Migration
             $table->string('Po_Box', 20)->nullable();
             $table->string('Postal_Code', 20)->nullable();
 
-
-
             $table->foreignId('Country_Id', 12)
-            ->constrained('Geox_Country_Master_T')
-            ->onDelete('no action')
-            ->nullable();
-
-
-
-
+                    ->constrained('Geox_Country_Master_T')
+                    ->onDelete('no action')
+                    ->nullable();
 
             $table->foreignId('Region_Id', 12)
-            ->constrained('Geox_Region_Master_T')
-            ->onDelete('no action')
-            ->nullable();
-
-
+                    ->constrained('Geox_Region_Master_T')
+                    ->onDelete('no action')
+                    ->nullable();
 
             $table->foreignId('Location_Id', 12)
-            ->constrained('Geox_Location_Master_T')
-            ->onDelete('no action')
-            ->nullable();
-
-
+                    ->constrained('Geox_Location_Master_T')
+                    ->onDelete('no action')
+                    ->nullable();
             $table->string('GL_Account_No', 20)->nullable();
             $table->string('Telephone', 30)->nullable();
             $table->string('Fax', 30)->nullable();
@@ -431,49 +443,35 @@ return new class extends Migration
        // Customer Addresses Table (Physical & Shipping Address)
         Schema::create('Customers_Contact_T', function (Blueprint $table) {
             $table->id();
-            $table->string('Customer_Contact_Code', 30)->unique()->nullable(); // Renamed from Customer_Contact_Id
+            $table->string('Customer_Contact_Code', 30)->unique()->nullable(); 
+
             $table->enum('Type', ['physical', 'shipping'])->nullable();
 
-            // Adjusted to refer to your correct main customer table (assuming 'Customers_Master_T')
-            $table->foreignId('Customer_Id')->nullable()->constrained('Customers_Master_T')->onDelete('no action');
-
-         
-
-
-            $table->text('Address')->nullable();
-
-
+            $table->foreignId('Customers_Contact_Id')->nullable()->constrained('Customers_Master_T')->onDelete('no action');
             $table->foreignId('City_Id', 12)
             ->constrained('Geox_City_Master_T')
             ->onDelete('no action')
             ->nullable();
 
-            $table->foreignId('State_Id', 12)
+           $table->foreignId('State_Id', 12)
             ->constrained('Geox_State_Master_T')
             ->onDelete('no action')
             ->nullable();
 
-
-
-            $table->foreignId('Country_Id', 12)
+          $table->foreignId('Country_Id', 12)
             ->constrained('Geox_Country_Master_T')
             ->onDelete('no action')
             ->nullable();
 
-            $table->string('Postal_code')->nullable();
-            $table->string('Phone')->nullable();
-
-            // Added from MSSQL structure with renamed fields to avoid conflict
-            $table->string('contact_person_name', 150)->nullable();
-            $table->string('telephone', 30)->nullable();
-            $table->string('fax', 30)->nullable();
-            $table->string('gsm', 30)->nullable();
-            $table->string('email_address', 50)->nullable(); // Renamed from Email
-            $table->string('designation', 50)->nullable();
-            $table->string('remarks', 200)->nullable();
-            $table->string('contact_user_code', 12)->nullable(); // Renamed from User_Id
-            $table->dateTime('created_date')->nullable();
-            $table->char('updated_status', 1)->nullable();
+            $table->string('Contact_Person_Name', 150)->nullable();
+            $table->string('Telephone', 30)->nullable();
+            $table->string('Fax', 30)->nullable();
+            $table->string('Gsm', 30)->nullable();
+            $table->string('Email', 50)->nullable(); // Renamed from Email
+            $table->string('Designation', 50)->nullable();
+            $table->string('Remarks', 200)->nullable();
+            $table->dateTime('Created_date')->nullable();
+            $table->char('Updated_status', 1)->nullable();
             $table->timestamps();
 
         });
@@ -489,30 +487,48 @@ return new class extends Migration
             $table->string('Product_Department_Name_Ar')->nullable();
             $table->char('Touch_Screen_Status')->nullable();
             $table->char('Stock_Control_Status')->nullable();
-            $table->string('image_path')->nullable();
-            $table->integer('size')->nullable();
-            $table->string('extension', 10)->nullable();
-            $table->string('type', 50)->nullable();
-            $table->char('updated_status', 1)->nullable();
+            $table->string('Image_path')->nullable();
+            $table->integer('Image_Size')->nullable();
+            $table->string('Image_Extension', 10)->nullable();
+            $table->string('Image_Type', 50)->nullable();
+            $table->datetime('Created_Date')->nullable();
 
             $table->foreignId('Created_By', 12)
             ->constrained('Secx_Admin_User_Master_T')
             ->onDelete('no action')
             ->nullable();
+            $table->char('Updated_Status', 1)->nullable();
+
+            
             $table->timestamps();
         });
 
 
         Schema::create('Products_Sub_Department_T', function (Blueprint $table) {
             $table->id();
-            $table->string('Product_Sub_Department_Code', 30)->unique()->nullable(); // Renamed from Product_Sub_Department_Id
-            $table->foreignId('product_department_id')->constrained('Products_Departments_T')->onDelete('no action');
-            $table->string('name',50)->unique();
-            $table->text('description',50)->nullable();
-            $table->string('image_path')->nullable();
-            $table->integer('size')->nullable();
-            $table->string('extension', 10)->nullable();
-            $table->string('type', 50)->nullable();
+            $table->foreignId('Products_Departments_Id')
+                    ->constrained('Products_Departments_T')
+                    ->onDelete('no action');
+
+            $table->string('Products_Sub_Department_Code', 30)
+                  ->unique()
+                  ->nullable(); // Renamed from Product_Sub_Department_Id
+            
+            $table->string('Sub_Department_Name',50)->unique();
+            $table->string('Sub_Department_Name_Ar',50)->unique();
+            $table->text('Sub_Department_Description',50)->nullable();
+            $table->string('Image_path')->nullable();
+            $table->integer('Image_Size')->nullable();
+            $table->string('Image_Extension', 10)->nullable();
+            $table->string('Image_Type', 50)->nullable();
+            $table->datetime('Created_Date')->nullable();
+
+            $table->foreignId('Created_By', 12)
+            ->constrained('Secx_Admin_User_Master_T')
+            ->onDelete('no action')
+            ->nullable();
+            $table->char('Updated_Status', 1)->nullable();
+
             $table->timestamps();
         });
 
@@ -520,16 +536,26 @@ return new class extends Migration
         Schema::create('Products_Sub_Sub_Department_T', function (Blueprint $table) {
             $table->id();
 
+            $table->string('Slug')->nullable();
+
+            $table->foreignId('Product_Sub_Department_Id')
+                    ->constrained('Products_Sub_Department_T')
+                    ->onDelete('no action');
+
              $table->string('Product_Sub_Sub_Department_Code', 30)->unique()->nullable();
-
-            $table->foreignId('product_sub_department_id')->constrained('Products_Sub_Department_T')->onDelete('no action');
-
-            $table->string('name',50)->unique();
-            $table->string('description',50)->nullable();
-            $table->string('image_path')->nullable();
-            $table->integer('size')->nullable();
-            $table->string('extension', 10)->nullable();
-            $table->string('type', 50)->nullable();
+            $table->string('Product_Sub_Sub_Department_Name',50)->unique();
+            $table->string('Product_Sub_Sub_Department_Name_Ar',50)->unique();
+            $table->string('Product_Sub_Sub_Department_Description',50)->nullable();
+            $table->string('Image_Path')->nullable();
+            $table->integer('Image_Size')->nullable();
+            $table->string('Image_Extension', 10)->nullable();
+            $table->string('Image_Type', 50)->nullable();
+            $table->datetime('Created_Date')->nullable();
+             $table->foreignId('Created_By', 12)
+                            ->constrained('Secx_Admin_User_Master_T')
+                            ->onDelete('no action')
+                            ->nullable();
+            $table->char('Updated_Status', 1)->nullable();
             $table->timestamps();
         });
 
@@ -537,60 +563,103 @@ return new class extends Migration
         Schema::create('Products_Types_Master_T', function (Blueprint $table) {
             $table->id();
             $table->string('Product_Types_Code', 30)->unique()->nullable();
-            $table->string('name')->unique();
-            $table->timestamps();
-         });
-
-        Schema::create('Products_Brands_Master_T', function (Blueprint $table) {
-            $table->id();
-            $table->string('Product_Brand_Code', 30)->unique()->nullable(); // Renamed from Product_Brand_Id
-            $table->string('name')->unique();
-            $table->timestamps();
-        });
- 
-       Schema::create('Products_Manufacture_Master_T', function (Blueprint $table) {
-            $table->id();
-            $table->string('Product_Manufacture_Code', 30)->unique()->nullable(); // Renamed from Product_Types_Id
-            $table->string('name')->unique();
-            $table->timestamps();
-        });
-
-        // Products Table
-        Schema::create('Products_Master_T', function (Blueprint $table) {
-            $table->id();
-            $table->string('Product_Code', 30)->unique()->nullable(); // Renamed from Product_Id
-            $table->foreignId('product_department_id')->constrained('Products_Departments_T')->onDelete('no action');
-            $table->foreignId('product_sub_department_id')->constrained('Products_Sub_Department_T')->onDelete('no action');
-            $table->foreignId('product_sub_sub_department_id')->constrained('Products_Sub_Sub_Department_T')->onDelete('no action');
-
-            $table->foreignId('product_type_id')->constrained('Products_Types_Master_T')->onDelete('no action');
-            $table->foreignId('product_brand_id')->constrained('Products_Brands_Master_T')->onDelete('no action');
-            $table->foreignId('product_manufacture_id')->constrained('Products_Manufacture_Master_T')->onDelete('no action');
-
-            $table->string('name')->index();
-            $table->string('name_ar')->index();
-            $table->text('description');
-            $table->decimal('price', 10, 2);
-            $table->integer('stock');
-
-            $table->enum('status', ['available', 'out_of_stock', 'discontinued'])->default('available');
-
-
-            $table->boolean('minor_item')->nullable();
-            $table->string('brand_code', 5)->nullable();
-            $table->string('manufacturer_code', 150)->nullable();
-            $table->string('product_user_code', 12)->nullable(); // renamed from User_Id
-
-            $table->boolean('barcode_changed_status')->nullable();
-            $table->boolean('inhouse_barcode')->nullable();
-            $table->string('inhouse_barcode_source', 12)->nullable();
-            $table->integer('product_owner_jurisdiction')->nullable();
-            $table->char('updated_status', 1)->nullable();
-
+            $table->string('Product_Types_Name')->unique();
+            $table->string('Product_Types_Description')->nullable()->unique();
+            $table->boolean('Default_Product_Type')->nullable();
+            $table->datetime('Created_Date')->nullable();
             $table->foreignId('Created_By', 12)
             ->constrained('Secx_Admin_User_Master_T')
             ->onDelete('no action')
             ->nullable();
+            $table->char('Updated_Status', 1)->nullable();
+            $table->timestamps();
+          
+         });
+
+
+         Schema::create('Products_Manufacture_Master_T', function (Blueprint $table) {
+            $table->id();
+            $table->string('Product_Manufacture_Code', 30)->unique()->nullable(); // Renamed from Product_Types_Id
+            $table->string('Products_Manufacture_Name')->unique();
+            $table->string('Products_Manufacture_Name_Ar')->nullable()->unique();
+            $table->foreignId('Product_Department_Id')->nullable()->constrained('Products_Departments_T')->onDelete('no action');
+            $table->string('Products_Manufacture_Description')->nullable();
+
+            $table->foreignId('Manufacturer_Country_Code', 12)
+                   ->nullable()
+                   ->constrained('Geox_Country_Master_T')
+                   ->onDelete('no action');
+
+            $table->datetime('Created_Date')->nullable();
+            $table->foreignId('Created_By', 12)
+                  ->nullable()
+                  ->constrained('Secx_Admin_User_Master_T')
+                  ->onDelete('no action');
+
+            $table->char('Updated_Status', 1)->nullable();
+
+            $table->timestamps();
+        });
+
+        Schema::create('Products_Brands_Master_T', function (Blueprint $table) {
+            $table->id();
+            $table->string('Product_Brand_Code', 30)->unique()->nullable(); // Renamed from Product_Brand_Id
+            $table->string('Products_Brands_Name')->unique();
+            $table->string('Products_Brands_Name_Ar')->nullable()->unique();
+            $table->string('Products_Brands_Description')->unique();
+            $table->datetime('Created_Date')->nullable();
+             $table->foreignId('Created_By', 12)
+            ->constrained('Secx_Admin_User_Master_T')
+            ->onDelete('no action')
+            ->nullable();
+            $table->char('Updated_Status', 1)->nullable();
+            $table->timestamps();
+        });
+ 
+       
+
+        // Products Table
+        Schema::create('Products_Master_T', function (Blueprint $table) {
+            $table->id();
+            $table->string('Product_Code', 30)->unique()->nullable(); // Renamed from Products_Id
+             $table->string('Slug')->nullable();
+            $table->foreignId('Product_Department_Id')->constrained('Products_Departments_T')->onDelete('no action');
+            $table->foreignId('Product_Sub_Department_Id')->constrained('Products_Sub_Department_T')->onDelete('no action');
+            $table->foreignId('Product_Sub_Sub_Department_Id')->constrained('Products_Sub_Sub_Department_T')->onDelete('no action');
+
+            $table->unsignedBigInteger('Product_Type_Id')->nullable();
+            $table->foreign('Product_Type_Id')->references('id')->on('Products_Types_Master_T')->onDelete('no action');
+
+            $table->unsignedBigInteger('Product_Brand_Id')->nullable();
+            $table->foreign('Product_Brand_Id')->references('id')->on('Products_Brands_Master_T')->onDelete('no action');
+
+            $table->unsignedBigInteger('Product_Manufacture_Id')->nullable();
+            $table->foreign('Product_Manufacture_Id')->references('id')->on('Products_Manufacture_Master_T')->onDelete('no action');
+
+            $table->string('Product_Name')->index();
+            $table->string('Product_Name_Ar')->index();
+            $table->text('Product_Description');
+            $table->decimal('Product_Price', 10, 2);
+            $table->integer('Product_Stock');
+
+            $table->enum('Status', ['available', 'out_of_stock', 'discontinued'])->default('available');
+
+
+            $table->boolean('Minor_Item')->nullable();
+            $table->string('Brand_Code', 5)->nullable();
+            $table->string('Manufacturer_Code', 150)->nullable();
+            $table->string('Product_User_Code', 12)->nullable(); // renamed from User_Id
+
+            $table->boolean('Barcode_Changed_Status')->nullable();
+            $table->boolean('Inhouse_Barcode')->nullable();
+            $table->string('Inhouse_Barcode_Source', 50)->nullable();
+            $table->integer('Product_Owner_Jurisdiction')->nullable();
+            $table->foreignId('Created_By', 12)
+            ->constrained('Secx_Admin_User_Master_T')
+            ->onDelete('no action')
+            ->nullable();
+            $table->dateTime('Created_Date')->nullable();
+            $table->char('Updated_Status', 1)->nullable();
 
             $table->timestamps();
         });
@@ -599,38 +668,67 @@ return new class extends Migration
 
         Schema::create('Merchant_Product_Stock_T', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('merchant_id')->constrained('Merchants_Master_T')->onDelete('no action');
-            $table->foreignId('product_id')->constrained('Products_Master_T')->onDelete('no action');
-            $table->integer('stock');
-            $table->decimal('price', 10, 2);
+            $table->foreignId('Merchant_Id')->constrained('Merchants_Master_T')->onDelete('no action');
+            $table->foreignId('Products_Id')->constrained('Products_Master_T')->onDelete('no action');
+            $table->integer('Stock');
+            $table->decimal('Price', 10, 2);
+            $table->foreignId('Created_By', 12)
+            ->constrained('Secx_Admin_User_Master_T')
+            ->onDelete('no action')
+            ->nullable();
+            $table->dateTime('Created_Date')->nullable();
+            $table->char('Updated_Status', 1)->nullable();
             $table->timestamps();
 
         });
 
 
 
-        Schema::create('Products_Barcodes_T', function (Blueprint $table) {
+        Schema::create('Product_Supplier_BarCode_T', function (Blueprint $table) {
             $table->id();
 
-            $table->string('product_barcode_code', 30)->unique()->nullable(); // Renamed from Product_Barcode_Id
-            $table->foreignId('product_id')->constrained('Products_Master_T')->onDelete('no action');
-            $table->string('barcode')->unique();
-            $table->string('barcode_type')->nullable();
-            $table->string('barcode_format')->nullable();
+            $table->string('Product_Barcode_Code', 30)->unique()->nullable(); // Renamed from Product_Barcode_Id
+            $table->foreignId('Products_Id')->constrained('Products_Master_T')->onDelete('no action');
+            $table->string('Alternate_Unit_Code')->nullable(); // Renamed from Alternate_Unit_Id
+            $table->string('Supplier_Barcode')->unique()->nullable(); // Renamed from Alternate_Unit_Id
+            $table->integer('Created_Jurisdiction_Code')->nullable();
+            $table->integer('InHouse_Barcode')->nullable();
+            $table->string('InHouse_Barcode_Type')->nullable();
+            $table->string('InHouse_Barcode_Format')->nullable();
+            $table->char('Updated_Status', 1)->nullable();
+
+            $table->foreignId('Created_By', 12)
+            ->constrained('Secx_Admin_User_Master_T')
+            ->onDelete('no action')
+            ->nullable();
+            $table->dateTime('Created_Date')->nullable();
             $table->timestamps();
 
 
 
         });
+
+
+        DB::statement('CREATE UNIQUE INDEX idx_alternate_unit_code_not_null ON Product_Supplier_BarCode_T (Alternate_Unit_Code) WHERE Alternate_Unit_Code IS NOT NULL');
 
 
         Schema::create('Products_Packs_Master_T', function (Blueprint $table) {
             $table->id();
 
-            $table->string('product_pack_code', 17)->unique()->nullable(); // Renamed from Product_Pack_Id
-            $table->foreignId('product_id')->constrained('Products_Master_T')->onDelete('no action');
-            $table->integer('quantity'); // Total items in the pack
-            $table->decimal('price', 10, 2);
+            $table->string('Product_Pack_Code', 30)->unique()->nullable(); // Renamed from Product_Pack_Id
+
+            $table->foreignId('Products_Id')->constrained('Products_Master_T')->onDelete('no action');
+           
+
+            $table->string('Alternate_Unit_Code', 12); // nvarchar(12) NOT NULL
+            $table->float('Conversion_Factor')->nullable(); // float NULL
+            $table->boolean('Base_Unit')->nullable(); // bit NULL
+            $table->foreignId('Created_By', 12)
+            ->constrained('Secx_Admin_User_Master_T')
+            ->onDelete('no action')
+            ->nullable();
+            $table->dateTime('Created_Date')->nullable();
+            $table->char('Updated_Status', 1)->nullable();
 
             $table->timestamps();
 
@@ -643,16 +741,19 @@ return new class extends Migration
         Schema::create('Products_Images_T', function (Blueprint $table) {
             $table->id();
 
-            $table->string('product_image_code', 30)->unique()->nullable(); // Renamed from Product_Image_Id
-            $table->foreignId('product_id')->constrained('Products_Master_T')->onDelete('no action');
-            $table->string('image_path')->nullable();
-            $table->integer('size')->nullable();
-            $table->string('extension', 10)->nullable();
-            $table->string('type', 50)->nullable();
+            $table->string('Product_Image_Code', 30)->unique()->nullable(); // Renamed from Product_Image_Id
+            $table->foreignId('Products_Id')->constrained('Products_Master_T')->onDelete('no action');
+            $table->string('Image_Path')->nullable();
+            $table->integer('Image_Size')->nullable();
+            $table->string('Image_Extension', 10)->nullable();
+            $table->string('Image_Type', 50)->nullable();
+
             $table->foreignId('Created_By', 12)
             ->constrained('Secx_Admin_User_Master_T')
             ->onDelete('no action')
             ->nullable();
+            $table->dateTime('Created_Date')->nullable();
+            $table->char('Updated_Status', 1)->nullable();
             $table->timestamps();
         });
 
@@ -661,56 +762,65 @@ return new class extends Migration
         Schema::create('Products_Datasheet_T', function (Blueprint $table) {
             $table->id();
             $table->string('Product_Datasheet_Code', 17)->unique()->nullable(); // Renamed from Product_Datasheet_Id
-            $table->foreignId('product_id')->constrained('Products_Master_T')->onDelete('no action');
-            $table->string('datasheet_description')->nullable();
-            $table->string('datasheet_varible')->nullable();
-            $table->string('datasheet_value')->nullable();
+            $table->foreignId('Products_Id')->constrained('Products_Master_T')->onDelete('no action');
+            $table->string('Datasheet_Description')->nullable();
+            $table->string('Datasheet_Variable')->nullable();
+            $table->string('Datasheet_Value')->nullable();
             $table->timestamps();
 
         });
        // Wish List Table
         Schema::create('Customers_Wish_Lists_T', function (Blueprint $table) {
             $table->id();
-            $table->string('wish_list_code', 30)->unique()->nullable(); // Renamed from Wish_List_Id
-            $table->foreignId('customer_id')->constrained('Customers_Master_T')->onDelete('no action');
-            $table->foreignId('product_id')->constrained('Products_Master_T')->onDelete('no action');
+            $table->string('Wish_List_Code', 30)->unique()->nullable(); // Renamed from Wish_List_Id
+            $table->foreignId('Customers_Id')->constrained('Customers_Master_T')->onDelete('no action');
+            $table->foreignId('Products_Id')->constrained('Products_Master_T')->onDelete('no action');
+            $table->foreignId('Created_By', 12)
+            ->constrained('Secx_Admin_User_Master_T')
+            ->onDelete('no action')
+            ->nullable();
+            $table->dateTime('Created_Date')->nullable();
+            $table->char('Updated_Status', 1)->nullable();
             $table->timestamps();
         });
 
         // Cart Table
         Schema::create('Customers_Carts_T', function (Blueprint $table) {
             $table->id();
-            $table->string('cart_code', 30)->unique()->nullable(); // Renamed from Cart_Id
-            $table->foreignId('customer_id')->constrained('Customers_Master_T')->onDelete('no action');
-            $table->foreignId('product_id')->constrained('Products_Master_T')->onDelete('no action');
-            $table->integer('quantity');
+            $table->string('Cart_Code', 30)->unique()->nullable(); // Renamed from Cart_Id
+            $table->foreignId('Customers_Id')->constrained('Customers_Master_T')->onDelete('no action');
+            $table->foreignId('Products_Id')->constrained('Products_Master_T')->onDelete('no action');
+            $table->integer('Quantity');
             $table->timestamps();
         });
 
          // Orders Table
          Schema::create('Orders_Placed_T', function (Blueprint $table) {
             $table->id();
-            $table->string('order_code', 30)->unique()->nullable(); // Renamed from Order_Id
-            $table->string('transaction_number')->unique();
+            $table->string('Order_Code', 30)->unique()->nullable(); // Renamed from Orders_Placed_Id
+            $table->string('Transaction_Number')->unique();
 
-            $table->foreignId('customer_id')->constrained('Customers_Master_T')->onDelete('no action');
-            $table->decimal('total_price', 10, 2);
-            $table->enum('status', ['pending', 'processing', 'packed', 'dispatched', 'shipped', 'delivered', 'cancelled'])->default('pending');
+            $table->foreignId('Customers_Id')->constrained('Customers_Master_T')->onDelete('no action');
+            $table->decimal('Total_Price', 10, 2);
+            $table->enum('Status', ['pending', 'processing', 'packed', 'dispatched', 'shipped', 'delivered', 'cancelled'])->default('pending');
            $table->timestamps();
         });
 
         // Order Items Table
         Schema::create('Orders_Placed_Details_T', function (Blueprint $table) {
             $table->id();
-            $table->string('order_Placed_code', 30)->unique()->nullable(); // Renamed from Order_Item_Id
-            $table->foreignId('order_id')->constrained('Orders_Placed_T')->onDelete('no action');
-            $table->foreignId('cart_id')->constrained('Customers_Carts_T')->onDelete('no action');
-            $table->foreignId('product_id')->constrained('Products_Master_T')->onDelete('no action');
-            $table->integer('quantity');
-            $table->decimal('price', 10, 2);
-            $table->decimal('subtotal', 10, 2);
-            $table->decimal('vat', 10, 2);
-            $table->enum('status', ['pending', 'processing', 'packed', 'dispatched', 'shipped', 'delivered', 'cancelled'])->default('pending');
+            $table->string('Order_Placed_Code', 30)->unique()->nullable(); // Renamed from Order_Item_Id
+            $table->foreignId('Orders_Placed_Id')->constrained('Orders_Placed_T')->onDelete('no action');
+            $table->foreignId('Cart_Id')
+                    ->constrained('Customers_Carts_T')
+                    ->nullable()
+                    ->onDelete('no action');
+            $table->foreignId('Products_Id')->constrained('Products_Master_T')->onDelete('no action');
+            $table->integer('Quantity')->nullable();
+            $table->decimal('Price', 10, 2)->nullable();
+            $table->decimal('Subtotal', 10, 2)->nullable();
+            $table->decimal('Vat', 10, 2)->nullable();
+            $table->enum('Status', ['pending', 'processing', 'packed', 'dispatched', 'shipped', 'delivered', 'cancelled'])->default('pending');
             $table->timestamps();
         });
 
@@ -718,12 +828,12 @@ return new class extends Migration
         // Order Packaging Table
         Schema::create('Orders_Packaging_Details_T', function (Blueprint $table) {
             $table->id();
-            $table->string('packaging_code', 30)->unique()->nullable(); // Renamed from Packaging_Id
-            $table->foreignId('order_id')->constrained('Orders_Placed_T')->onDelete('no action');
-            $table->foreignId('orders_details_id')->constrained('Orders_Placed_Details_T')->onDelete('no action'); // 👈 FIXED
-            $table->string('unpacked_image')->nullable();
-            $table->string('packed_image')->nullable();
-            $table->foreignId('packed_by')->nullable()->constrained('Secx_Admin_User_Master_T')->onDelete('set null');
+            $table->string('Packaging_Code', 30)->unique()->nullable(); // Renamed from Packaging_Id
+            $table->foreignId('Orders_Placed_Id')->constrained('Orders_Placed_T')->onDelete('no action');
+            $table->foreignId('Orders_Placed_Details_Id')->constrained('Orders_Placed_Details_T')->onDelete('no action'); // 👈 FIXED
+            $table->string('Unpacked_Image')->nullable();
+            $table->string('Packed_Image')->nullable();
+            $table->foreignId('Packed_By')->nullable()->constrained('Secx_Admin_User_Master_T')->onDelete('set null');
             $table->timestamps();
         });
 
@@ -731,33 +841,33 @@ return new class extends Migration
         // Shipments Table
         Schema::create('Orders_Shipments_Details_T', function (Blueprint $table) {
             $table->id();
-            $table->string('shipment_code', 30)->unique()->nullable(); // Renamed from Shipment_Id
-            $table->foreignId('order_id')->constrained('Orders_Placed_T')->onDelete('no action');
-            $table->string('tracking_number')->unique();
-            $table->enum('status', ['dispatched', 'shipped', 'in_transit', 'delivered', 'returned'])->default('dispatched');
+            $table->string('Shipment_Code', 30)->unique()->nullable(); // Renamed from Shipment_Id
+            $table->foreignId('Orders_Placed_Id')->constrained('Orders_Placed_T')->onDelete('no action');
+            $table->string('Tracking_Number')->unique();
+            $table->enum('Status', ['dispatched', 'shipped', 'in_transit', 'delivered', 'returned'])->default('dispatched');
             $table->timestamps();
         });
 
         // Financial Transactions Table
         Schema::create('Orders_Financial_Transactions_T', function (Blueprint $table) {
             $table->id();
-            $table->string('financial_transaction_code', 30)->unique()->nullable(); // Renamed from Financial_Transaction_Id
-            $table->foreignId('order_id')->constrained('Orders_Placed_T')->onDelete('no action');
-            $table->foreignId('orders_details_id')->constrained('Orders_Placed_Details_T')->onDelete('no action');
-            $table->string('transaction_reference')->unique();
-            $table->enum('status', ['pending', 'posted', 'reconciled'])->default('pending');
+            $table->string('Financial_Transaction_Code', 30)->unique()->nullable(); // Renamed from Financial_Transaction_Id
+            $table->foreignId('Orders_Placed_Id')->constrained('Orders_Placed_T')->onDelete('no action');
+            $table->foreignId('Orders_Placed_Details_Id')->constrained('Orders_Placed_Details_T')->onDelete('no action');
+            $table->string('Transaction_Reference')->unique();
+            $table->enum('Status', ['pending', 'posted', 'reconciled'])->default('pending');
             $table->timestamps();
         });
 
         // Order Fulfillment Issues Table
         Schema::create('Orders_Customers_Grievances_T', function (Blueprint $table) {
             $table->id();
-            $table->string('orders_customers_grievances_code', 30)->unique()->nullable(); // Renamed from Grievance_Id
-            $table->foreignId('order_id')->constrained('Orders_Placed_T')->onDelete('no action');
-            $table->foreignId('orders_details_id')->constrained('Orders_Placed_Details_T')->onDelete('no action');
+            $table->string('Orders_Customers_Grievances_Code', 30)->unique()->nullable(); // Renamed from Grievance_Id
+            $table->foreignId('Orders_Placed_Id')->constrained('Orders_Placed_T')->onDelete('no action');
+            $table->foreignId('Orders_Placed_Details_Id')->constrained('Orders_Placed_Details_T')->onDelete('no action');
 
-            $table->enum('issue_status', ['pending_review', 'resolved', 'cancelled'])->default('pending_review');
-            $table->text('resolution_details')->nullable();
+            $table->enum('Issue_Status', ['pending_review', 'resolved', 'cancelled'])->default('pending_review');
+            $table->text('Resolution_Details')->nullable();
             $table->timestamps();
         });
 
@@ -765,11 +875,11 @@ return new class extends Migration
         Schema::create('Sales_Returns_T', function (Blueprint $table) {
             $table->id();
             $table->string('sales_return_code', 30)->unique()->nullable(); // Renamed from Sales_Return_Id
-            $table->foreignId('order_id')->constrained('orders_placed_t')->onDelete('no action');
-            $table->foreignId('orders_details_id')->constrained('Orders_Placed_Details_T')->onDelete('no action');
-            $table->foreignId('product_id')->nullable()->constrained('Products_Master_T')->onDelete('no action');
-            $table->text('reason');
-            $table->enum('status', ['pending', 'approved', 'rejected', 'processed'])->default('pending');
+            $table->foreignId('Orders_Placed_Id')->constrained('orders_placed_t')->onDelete('no action');
+            $table->foreignId('Orders_Placed_Details_Id')->constrained('Orders_Placed_Details_T')->onDelete('no action');
+            $table->foreignId('Products_Id')->nullable()->constrained('Products_Master_T')->onDelete('no action');
+            $table->text('Reason');
+            $table->enum('Status', ['pending', 'approved', 'rejected', 'processed'])->default('pending');
             $table->timestamps();
         });
 
@@ -858,18 +968,18 @@ return new class extends Migration
         // Defective Product Returns Table
         Schema::create('Defective_Products_Returns_T', function (Blueprint $table) {
             $table->id();
-            $table->string('defective_product_return_code', 30)->unique()->nullable(); // Renamed from Defective_Product_Return_Id
-            $table->foreignId('sales_return_id')->constrained('Sales_Returns_T')->onDelete('no action');
-            $table->text('defect_description');
-            $table->text('resolution')->nullable();
+            $table->string('Defective_Product_Return_Code', 30)->unique()->nullable(); // Renamed from Defective_Product_Return_Id
+            $table->foreignId('Sales_Return_Id')->constrained('Sales_Returns_T')->onDelete('no action');
+            $table->text('Defect_Description');
+            $table->text('Resolution')->nullable();
             $table->timestamps();
         });
 
       //Feedback questions
       Schema::create('Orders_Feedbacks_Master_T', function (Blueprint $table) {
             $table->id();
-            $table->string('feedback_question_code', 30)->unique()->nullable(); // Renamed from Feedback_Question_Id
-            $table->string('question');
+            $table->string('Feedback_Question_Code', 30)->unique()->nullable(); // Renamed from Feedback_Question_Id
+            $table->string('Question');
             $table->timestamps();
         });
 
@@ -877,22 +987,22 @@ return new class extends Migration
         Schema::create('Orders_Customers_Feedback_T', function (Blueprint $table) {
             $table->id();
             $table->string('Orders_Customers_Feedback_Code', 30)->unique()->nullable(); // Renamed from Feedback_Id
-            $table->foreignId('orders_details_id')->constrained('Orders_Placed_Details_T')->onDelete('no action');
+            $table->foreignId('Orders_Placed_Details_Id')->constrained('Orders_Placed_Details_T')->onDelete('no action');
 
-            $table->foreignId('customer_id')->constrained('Customers_Master_T')->onDelete('no action');
-            $table->foreignId('feedback_question_id')->constrained('Orders_Feedbacks_Master_T')->onDelete('no action');
-            $table->boolean('response')->default(false);
+            $table->foreignId('Customer_Id')->constrained('Customers_Master_T')->onDelete('no action');
+            $table->foreignId('Feedback_Question_Id')->constrained('Orders_Feedbacks_Master_T')->onDelete('no action');
+            $table->boolean('Response')->default(false);
             $table->timestamps();
         });
 
         // Loyalty Transactions Table
         Schema::create('Customers_Loyalty_Transactions_T', function (Blueprint $table) {
             $table->id();
-            $table->string('loyalty_transaction_code', 30)->unique()->nullable(); // Renamed from Loyalty_Transaction_Id
-            $table->foreignId('customer_id')->constrained('Customers_Master_T')->onDelete('no action');
-            $table->foreignId('order_id')->nullable()->constrained('Orders_Placed_T')->onDelete('set null');
-            $table->integer('points_earned')->default(0);
-            $table->integer('points_redeemed')->default(0);
+            $table->string('Loyalty_Transaction_Code', 30)->unique()->nullable(); // Renamed from Loyalty_Transaction_Id
+            $table->foreignId('Customer_Id')->constrained('Customers_Master_T')->onDelete('no action');
+            $table->foreignId('Orders_Placed_Id')->nullable()->constrained('Orders_Placed_T')->onDelete('set null');
+            $table->integer('Points_Earned')->default(0);
+            $table->integer('Points_Redeemed')->default(0);
             $table->timestamps();
         });
 
@@ -900,9 +1010,9 @@ return new class extends Migration
         Schema::create('Customers_Loyalty_T', function (Blueprint $table) {
             $table->id();
             $table->string('Customers_Loyalty_Code', 30)->unique()->nullable(); // Renamed from Loyalty_Id
-            $table->foreignId('customer_id')->constrained('Customers_Master_T')->onDelete('no action');
-            $table->integer('points_earned')->default(0);
-            $table->integer('points_redeemed')->default(0);
+            $table->foreignId('Customer_Id')->constrained('Customers_Master_T')->onDelete('no action');
+            $table->integer('Points_Earned')->default(0);
+            $table->integer('Points_Redeemed')->default(0);
             $table->timestamps();
         });
 
@@ -947,63 +1057,63 @@ return new class extends Migration
        // Distributors Table
         Schema::create('Colx_Distributors_T', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('customer_id')->constrained('Customers_Master_T')->onDelete('no action');
-            $table->string('company_name');
-            $table->text('business_details');
-            $table->string('region');
+            $table->foreignId('Customer_Id')->constrained('Customers_Master_T')->onDelete('no action');
+            $table->string('Company_Name');
+            $table->text('Business_Details');
+            $table->string('Region');
             $table->timestamps();
         });
 
         // Credit Customers Table
         Schema::create('Credit_Customers_T', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('customer_id')->constrained('Customers_Master_T')->onDelete('no action');
-            $table->decimal('credit_limit', 10, 2);
-            $table->decimal('balance_due', 10, 2)->default(0);
+            $table->foreignId('Customer_Id')->constrained('Customers_Master_T')->onDelete('no action');
+            $table->decimal('Credit_Limit', 10, 2);
+            $table->decimal('Balance_Due', 10, 2)->default(0);
             $table->timestamps();
         });
 
         // Collaborative Projects Table
         Schema::create('Colx_Collaborative_Projects_T', function (Blueprint $table) {
             $table->id();
-            $table->string('project_title');
-            $table->text('description');
-            $table->foreignId('customer_id')->nullable()->constrained('Customers_Master_T')->onDelete('set null');
+            $table->string('Project_Title');
+            $table->text('Description');
+            $table->foreignId('Customer_Id')->nullable()->constrained('Customers_Master_T')->onDelete('set null');
             $table->timestamps();
         });
 
         // Freelancers Table
         Schema::create('Colx_Freelancers_T', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('customer_id')->nullable()->constrained('Customers_Master_T')->onDelete('set null');
-            $table->string('skillset');
-            $table->text('experience');
+            $table->foreignId('Customer_Id')->nullable()->constrained('Customers_Master_T')->onDelete('set null');
+            $table->string('Skillset');
+            $table->text('Experience');
             $table->timestamps();
         });
 
         // Internships Table
         Schema::create('Colx_Internships_T', function (Blueprint $table) {
             $table->id();
-            $table->string('title');
-            $table->text('description');
-            $table->foreignId('customer_id')->nullable()->constrained('Customers_Master_T')->onDelete('set null');
+            $table->string('Title');
+            $table->text('Description');
+            $table->foreignId('Customer_Id')->nullable()->constrained('Customers_Master_T')->onDelete('set null');
             $table->timestamps();
         });
 
         // Training Courses Table
         Schema::create('Colx_Training_Courses_T', function (Blueprint $table) {
             $table->id();
-            $table->string('course_name');
-            $table->text('description');
-            $table->decimal('price', 10, 2);
+            $table->string('Course_Name');
+            $table->text('Description');
+            $table->decimal('Price', 10, 2);
             $table->timestamps();
         });
 
         // Job Positions Table
         Schema::create('Colx_Job_Positions_T', function (Blueprint $table) {
             $table->id();
-            $table->string('title');
-            $table->text('description');
+            $table->string('Title');
+            $table->text('Description');
             $table->timestamps();
         });
 

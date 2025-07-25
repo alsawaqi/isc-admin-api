@@ -11,15 +11,15 @@ use Illuminate\Support\Facades\Hash;
 class LoginController extends Controller
 {
    public function store(Request $request)
-    {
+{
         // Validate input
         $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
+            'Email' => 'required|email',
+            'Password' => 'required',
         ]);
 
         // Find user by email
-        $user = User::where('email', $request->email)->first();
+        $user = User::where('Email', $request->email)->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
             return response()->json(['error' => 'Invalid credentials'], 401);

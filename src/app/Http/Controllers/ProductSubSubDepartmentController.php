@@ -29,29 +29,29 @@ public function getFullDepartmentTree(){
         'subDepartments' => function ($subQuery) {
             $subQuery->select(
                 'id',
-                'product_department_id',
-                'Product_Sub_Department_Code',
-                'name',
-                'description'
+                'Products_Departments_Id',
+                'Products_Sub_Department_Code',
+                'Sub_Department_Name',
+                
             )
             ->with(['subSubDepartments' => function ($subSubQuery) {
                 $subSubQuery->select(
                     'id',
-                    'product_sub_department_id',
+                    'Product_Sub_Department_Id',
                     'Product_Sub_Sub_Department_Code',
-                    'name',
-                    'description',
-                    'image_path'
-                );
-            }]);
-        }
-    ])->select(
-        'id',
-        'Product_Department_Code',
-        'Product_Department_Name',
-        'Product_Department_Name_Ar',
-        'image_path'
-    )->get();
+                    'Product_Sub_Sub_Department_Name',
+                    'Product_Sub_Sub_Department_Description',
+                    'Image_Path'
+                            );
+                        }]);
+                        }
+                    ])->select(
+                        'id',
+                        'Product_Department_Code',
+                        'Product_Department_Name',
+                        'Product_Department_Name_Ar',
+                        'image_path'
+                    )->get();
 
     return response()->json($departments);
 }
@@ -60,61 +60,57 @@ public function getFullDepartmentTree(){
 public function store(Request $request){
 
      $request->validate([
-            'product_sub_department_id' => 'required|exists:Products_Sub_Department_T,id',
-            'name' => 'required|string|max:255',
+            'Product_Sub_Department_Id' => 'required|exists:Products_Sub_Department_T,id',
+            'Product_Sub_Sub_Department_Name' => 'required|string|max:255',
          ]);
   
 
-         try{
+        try{
 
-         
-         
-     $result = DB::transaction(function () use ($request) {
-            
-               
-        
-         
+                $result = DB::transaction(function () use ($request) {
+                        
+                        $imagePath = null;
+                        $imageSize = null;
+                        $imageExtension = null;
+                        $imageType = null;
 
-          $imagePath = null;
-            $imageSize = null;
-            $imageExtension = null;
-            $imageType = null;
+                        if ($request->hasFile('file')) {
+                            $file = $request->file('file');
+                            $path = Storage::disk('r2')->put('subsubdepartment', $file, 'public'); // changed to department
+                            $imagePath = $path;
+                            $imageSize = $file->getSize();
+                            $imageExtension = $file->getClientOriginalExtension();
+                            $imageType = $file->getMimeType();
+                        }
 
-            if ($request->hasFile('file')) {
-                $file = $request->file('file');
-                $path = Storage::disk('r2')->put('subsubdepartment', $file, 'public'); // changed to department
-                $imagePath = $path;
-                $imageSize = $file->getSize();
-                $imageExtension = $file->getClientOriginalExtension();
-                $imageType = $file->getMimeType();
-            }
+                $productsubsubCode = CodeGenerator::createCode('SUBSUBDEPT', 'Products_Sub_Sub_Department_T', 'Product_Sub_Sub_Department_Code');
 
-    $productsubsubCode = CodeGenerator::createCode('SUBSUBDEPT', 'Products_Sub_Sub_Department_T', 'Product_Sub_Sub_Department_Code');
-
-      
-    $new = ProductSubSubDepartment::create([
-                                        'Product_Sub_Sub_Department_Code' => $productsubsubCode,
-                                        'product_sub_department_id' => $request->product_sub_department_id,
-                                        'description' => $request->description,
-                                        'name' => $request->name,
-                                        'image_path' => $imagePath,
-                                        'size' => $imageSize,
-                                        'extension' => $imageExtension,
-                                        'type' => $imageType,
-         
-    ]);
+                
+                $new = ProductSubSubDepartment::create([
+                                                    'Product_Sub_Sub_Department_Code' => $productsubsubCode,
+                                                    'Product_Sub_Department_Id' => $request->Product_Sub_Department_Id,
+                                                    'Product_Sub_Sub_Department_Description' => $request->description,
+                                                    'Product_Sub_Sub_Department_Name' => $request->Product_Sub_Sub_Department_Name,
+                                                    'Product_Sub_Sub_Department_Name_Ar' => $request->Product_Sub_Sub_Department_Name,
+                                                    'Image_Path' => $imagePath,
+                                                    'Image_Size' => $imageSize,
+                                                    'Image_Extension' => $imageExtension,
+                                                    'Image_Type' => $imageType,
+                                                    'Created_Date' => now(),
+                                                    'Created_By' => $request->user()->id,
+                                            ]);
 
 
-     });
+                });
 
-     }catch(\Exception $e){
-            return response()->json(['error' => $e->getMessage()], 500);
-         }
+                }catch(\Exception $e){
+                        return response()->json(['error' => $e->getMessage()], 500);
+                    }
 
-    return response()->json([
-        'message' => 'Sub Sub Department created successfully',
-        'data' => $result
-    ]);
+                return response()->json([
+                    'message' => 'Sub Sub Department created successfully',
+                    'data' => $result
+                ]);
         
     }
 

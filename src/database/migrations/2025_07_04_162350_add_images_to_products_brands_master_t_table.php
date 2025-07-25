@@ -13,10 +13,10 @@ return new class extends Migration
     {
         Schema::table('Products_Brands_Master_T', function (Blueprint $table) {
             //
-            $table->string('image_path')->after('name')->nullable();
-            $table->integer('size')->after('image_path')->nullable();
-            $table->string('extension', 10)->after('size')->nullable();
-            $table->string('type', 50)->after('extension')->nullable();
+            $table->string('Brands_Image_Path')->after('name')->nullable();
+            $table->integer('Brands_Size')->after('Products_Brands_Image_Path')->nullable();
+            $table->string('Brands_Extension', 10)->after('Products_Brands_Size')->nullable();
+            $table->string('Brands_Type', 50)->after('Products_Brands_Extension')->nullable();
         });
     }
 

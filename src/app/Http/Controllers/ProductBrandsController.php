@@ -36,12 +36,16 @@ class ProductBrandsController extends Controller
 
         ProductBrands::create([
             'Product_Brand_Code' => $productBrandCode,
-            'name' => $request->name,
-            'image_path' => $imagePath,
-                    'size' => $imageSize,
-                    'extension' => $imageExtension,
-                    'type' => $imageType
-         ]);
+            'Products_Brands_Name' => $request->name,
+            'Products_Brands_Name_Ar' => $request->name,
+            'Products_Brands_Description' => $request->name,
+            'Created_By' => $request->user()->id,
+            'Created_Date' => now(),
+            'Brands_Image_Path' => $imagePath,
+            'Brands_Size' => $imageSize,
+            'Brands_Extension' => $imageExtension,
+            'Brands_Type' => $imageType
+        ]);
 
         return response()->json(['message' => 'Product brand created successfully'], 201);
     }

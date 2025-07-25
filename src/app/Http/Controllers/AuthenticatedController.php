@@ -27,9 +27,6 @@ class AuthenticatedController extends Controller
         try {
             return $this->loginPipeline($request)->then(function ($request) {
                 $token = $request->user()->createToken('token-name')->plainTextToken;
-
-               
-
                 return response()->json(['token' => $token]);
             });
         } catch (\Exception $e) {

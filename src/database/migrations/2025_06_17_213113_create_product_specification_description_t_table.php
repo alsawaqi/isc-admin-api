@@ -13,10 +13,14 @@ return new class extends Migration
     {
         Schema::create('Product_Specification_Description_T', function (Blueprint $table) {
     $table->id();
-    $table->string('name'); 
+    $table->string('Product_Specification_Description_Name'); 
     $table->foreignId('product_sub_sub_department_id')
           ->constrained('Products_Sub_Sub_Department_T')
           ->onDelete('cascade');
+    $table->foreignId('Created_By', 12)
+            ->constrained('Secx_Admin_User_Master_T')
+            ->onDelete('no action')
+            ->nullable();      
     $table->timestamps();
 });
     }
