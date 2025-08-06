@@ -4,7 +4,11 @@ use App\Models\SecurityRole;
 use Illuminate\Http\Request;
 use Laravel\Fortify\RoutePath;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\CityController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\StateController;
+use App\Http\Controllers\CountryController;
+use App\Http\Controllers\OrdersPlacedController;
 use App\Http\Controllers\ProductTypesController;
 use App\Http\Controllers\AuthenticatedController;
 use App\Http\Controllers\ProductBrandsController;
@@ -153,12 +157,55 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
             Route::get('/roles',  'index');
             Route::post('/roles',  'storeRole');
              Route::get('/roles/{id}/permissions',  'getRolePermissions');
-            Route::put('/roles/{id}/permissions',  'updateRolePermissions');
+            Route::post('/roles/{id}/permissions',  'updateRolePermissions');
             Route::post('/permissions',  'storePermission');
             Route::post('/assign-role',   'assignRole');     
       });
 
 
+
+      Route::controller(CountryController::class)->group(function () {
+
+            Route::get('/countries', 'index');
+            Route::post('/countries', 'store');
+        
+
+
+      });
+
+
+
+      Route::controller(OrdersPlacedController::class)->group(function () {
+
+            Route::get('/orders-placed', 'index');
+            Route::post('/orders-placed', 'store');
+            Route::get('/orders-placed/{id}', 'show');
+            Route::put('/orders-placed/{id}', 'update');
+            Route::delete('/orders-placed/{id}', 'destroy');
+
+      });
+
+
+
+
+        Route::controller(StateController::class)->group(function () {
+            Route::get('/states', 'index');
+            Route::post('/states', 'store');
+            Route::get('/states/countries', 'countries_index');
+
+      });
+
+
+        Route::controller(CityController::class)->group(function () {
+
+               Route::get('/cities',  'index');
+               Route::post('/cities',  'store');
+               Route::get('/cities/states',  'states_index');
+               Route::get('/cities/countries',  'countries_index');
+               Route::get('/states/by-country/{countryId}','byCountry');
+
+
+        });
   
 
    Route::post(RoutePath::for('logout', '/logout'), [AuthenticatedSessionController::class, 'destroy']);

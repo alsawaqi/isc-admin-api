@@ -53,6 +53,10 @@ class SecurityPermissionSeeder extends Seeder
             'merchant',
             'couriers',
             'admin report',
+            'geography',
+            'country',
+            'state',
+            'city',
         ];
 
         foreach ($permissions as $permission) {

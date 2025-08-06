@@ -156,11 +156,11 @@ return new class extends Migration
 
             $table->string('City_Code', 30)->unique()->nullable();
 
-            $table->foreignId('Jurisdiction_Id', 12)
-            ->constrained('Geox_Jurisdiction_Master_T')
-            ->onDelete('no action')
-            ->nullable();
-
+             
+             $table->foreignId('State_Id', 12)
+                    ->constrained('Geox_State_Master_T')
+                    ->onDelete('no action')
+                    ->nullable();
 
             $table->string('City_Name', 50)->nullable();
             $table->string('City_Name_Ar', 50)->nullable();
@@ -358,20 +358,25 @@ return new class extends Migration
             $table->string('Po_Box', 20)->nullable();
             $table->string('Postal_Code', 20)->nullable();
 
-            $table->foreignId('Country_Id', 12)
-                    ->constrained('Geox_Country_Master_T')
-                    ->onDelete('no action')
-                    ->nullable();
+            $table->unsignedBigInteger('Country_Id')->nullable();
 
-            $table->foreignId('Region_Id', 12)
-                    ->constrained('Geox_Region_Master_T')
-                    ->onDelete('no action')
-                    ->nullable();
+            $table->foreign('Country_Id')
+                ->references('id')->on('Geox_Country_Master_T')
+                ->onDelete('no action');  
 
-            $table->foreignId('Location_Id', 12)
-                    ->constrained('Geox_Location_Master_T')
-                    ->onDelete('no action')
-                    ->nullable();
+            $table->unsignedBigInteger('Region_Id')->nullable();
+
+            $table->foreign('Region_Id')
+                ->references('id')->on('Geox_Region_Master_T')
+                ->onDelete('no action');
+
+            $table->unsignedBigInteger('Location_Id')->nullable();
+
+            $table->foreign('Location_Id')
+                ->references('id')->on('Geox_Location_Master_T')
+                ->onDelete('no action');
+
+            
             $table->string('GL_Account_No', 20)->nullable();
             $table->string('Telephone', 30)->nullable();
             $table->string('Fax', 30)->nullable();
@@ -447,7 +452,11 @@ return new class extends Migration
 
             $table->enum('Type', ['physical', 'shipping'])->nullable();
 
-            $table->foreignId('Customers_Contact_Id')->nullable()->constrained('Customers_Master_T')->onDelete('no action');
+            $table->foreignId('Customers_Contact_Id')
+                   ->constrained('Customers_Master_T')
+                   ->onDelete('no action')
+                   ->nullable();
+
             $table->foreignId('City_Id', 12)
             ->constrained('Geox_City_Master_T')
             ->onDelete('no action')
@@ -564,7 +573,7 @@ return new class extends Migration
             $table->id();
             $table->string('Product_Types_Code', 30)->unique()->nullable();
             $table->string('Product_Types_Name')->unique();
-            $table->string('Product_Types_Description')->nullable()->unique();
+            $table->string('Product_Types_Description')->nullable();
             $table->boolean('Default_Product_Type')->nullable();
             $table->datetime('Created_Date')->nullable();
             $table->foreignId('Created_By', 12)
@@ -605,8 +614,9 @@ return new class extends Migration
             $table->id();
             $table->string('Product_Brand_Code', 30)->unique()->nullable(); // Renamed from Product_Brand_Id
             $table->string('Products_Brands_Name')->unique();
-            $table->string('Products_Brands_Name_Ar')->nullable()->unique();
-            $table->string('Products_Brands_Description')->unique();
+            $table->string('Products_Brands_Name_Ar')->nullable();
+            $table->string('Products_Brands_Description')->nullable();
+            
             $table->datetime('Created_Date')->nullable();
              $table->foreignId('Created_By', 12)
             ->constrained('Secx_Admin_User_Master_T')
@@ -799,7 +809,7 @@ return new class extends Migration
             $table->id();
             $table->string('Order_Code', 30)->unique()->nullable(); // Renamed from Orders_Placed_Id
             $table->string('Transaction_Number')->unique();
-
+            $table->foreignId('Customers_Contacts_Id')->constrained('Customers_Contact_T')->onDelete('no action');  
             $table->foreignId('Customers_Id')->constrained('Customers_Master_T')->onDelete('no action');
             $table->decimal('Total_Price', 10, 2);
             $table->enum('Status', ['pending', 'processing', 'packed', 'dispatched', 'shipped', 'delivered', 'cancelled'])->default('pending');

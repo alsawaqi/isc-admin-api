@@ -19,5 +19,19 @@ class DatabaseSeeder extends Seeder
             'User_Name' => 'admin',
             'Email' => 'admin@isc.com',
         ]);
+
+
+         $this->call([
+            ProductsDepartmentsTableSeeder::class,
+            ProductsSubDepartmentsTableSeeder::class,
+            ProductsSubSubDepartmentsTableSeeder::class,
+            ProductsTypesMasterTableSeeder::class,
+            ProductsBrandsMasterTableSeeder::class,
+            ProductsManufactureMasterTableSeeder::class,
+            ProductsMasterTableSeeder::class,
+            ProductsImagesTableSeeder::class,
+            ProductSpecificationDescriptionTableSeeder::class,
+            ProductSpecificationProductTableSeeder::class,
+        ]);
     }
 }
