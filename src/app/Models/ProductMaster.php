@@ -24,4 +24,8 @@ class ProductMaster extends Model
             ]
         ];
     }
+
+    public function specs(){
+            return $this->hasMany(ProductSpecificationProduct::class, 'Product_Id');
+        }
 }

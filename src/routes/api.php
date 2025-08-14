@@ -134,9 +134,12 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
      Route::controller(ProductSpecificationDescriptionController::class)->group(function () {
          Route::get('/product-specifications', 'index');
-     
-         Route::post('/product-specifications', 'store');
-     
+         Route::get('/product-specification', 'getfilter');
+         Route::put('/product-specifications/bulk', 'bulkUpsert');
+         Route::post('/product-specifications/bulk', 'store');
+         Route::delete('/product-specifications/{id}', 'destroy');
+         Route::delete('/product-specification-values/{id}', 'destroyValue');
+
      });
 
 
