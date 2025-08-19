@@ -50,6 +50,14 @@ class ProductMasterController extends Controller
                     $product_manufacture_id = $request->input('product_manufacture_id');
                     $product_manufacture_id = $product_manufacture_id === '' ? null : $product_manufacture_id;
 
+
+                        $length = $request->Length_Cm;
+                        $width  = $request->Width_Cm;
+                        $height = $request->Height_Cm;
+
+                        // Calculate CBM
+                        $cbm = ($length * $width * $height) / 1000000;
+
                     $product = ProductMaster::create([
                                             'Product_Code' => $productMasterCode,
                                             'Product_Department_Id' => $request->product_department_id,
@@ -63,7 +71,11 @@ class ProductMasterController extends Controller
                                             'Product_Description' => $request->description,
                                             'Product_Price' => $request->price,
                                             'Product_Stock' => $request->stock,
-                                         
+                                             'Weight_Kg' => $request->Weight_Kg,
+                                             'Length_Cm' => $request->Length_Cm,
+                                             'Width_Cm' => $request->Width_Cm,
+                                             'Height_Cm' => $request->Height_Cm,
+                                              'Volume_Cbm' => round($cbm, 4), // keep 4 decimals
                                             'Created_By' => Auth::id(),
                                             'Created_Date' => now(),
                                 ]);

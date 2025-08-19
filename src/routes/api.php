@@ -7,7 +7,12 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CityController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\StateController;
+use App\Http\Controllers\RegionController;
 use App\Http\Controllers\CountryController;
+use App\Http\Controllers\ShipperController;
+use App\Http\Controllers\DistrictController;
+use App\Http\Controllers\HeavyRateController;
+use App\Http\Controllers\HeavyVehicleController;
 use App\Http\Controllers\OrdersPlacedController;
 use App\Http\Controllers\ProductTypesController;
 use App\Http\Controllers\AuthenticatedController;
@@ -15,9 +20,14 @@ use App\Http\Controllers\ProductBrandsController;
 use App\Http\Controllers\ProductImagesController;
 use App\Http\Controllers\ProductMasterController;
 use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\ShipperContactController;
 use App\Http\Controllers\ProductsBarcodesController;
+use App\Http\Controllers\ShipperVolumeRateController;
+use App\Http\Controllers\ShipperWeightRateController;
 use App\Http\Controllers\ProductDepartmentsController;
 use App\Http\Controllers\ProductManufactureController;
+use App\Http\Controllers\ShipperDestinationController;
+use App\Http\Controllers\ShipperShippingRateController;
 use App\Http\Controllers\ProductSubDepartmentController;
 use App\Http\Controllers\ProductSubSubDepartmentController;
 use App\Http\Controllers\ProductSpecificationProductController;
@@ -101,9 +111,76 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
    });
 
 
+   Route::prefix('v1/shipping')->group(function () {
+          // Shippers
+          Route::get('/shippers', [ShipperController::class, 'index']);
+          Route::post('/shippers', [ShipperController::class, 'store']);
+          Route::get('/shippers/{shipper}', [ShipperController::class, 'show']);
+          Route::put('/shippers/{shipper}', [ShipperController::class, 'update']);
+          Route::patch('/shippers/{shipper}', [ShipperController::class, 'update']);
+          Route::delete('/shippers/{shipper}', [ShipperController::class, 'destroy']);
+          Route::post('/shippers/{shipper}/toggle', [ShipperController::class, 'toggle']);
+
+          // Contacts (nested)
+          Route::get('/shippers/{shipper}/contacts', [ShipperContactController::class, 'index']);
+          Route::post('/shippers/{shipper}/contacts', [ShipperContactController::class, 'store']);
+          Route::put('/shippers/{shipper}/contacts/{contact}', [ShipperContactController::class, 'update']);
+          Route::patch('/shippers/{shipper}/contacts/{contact}', [ShipperContactController::class, 'update']);
+          Route::delete('/shippers/{shipper}/contacts/{contact}', [ShipperContactController::class, 'destroy']);
+
+          // Destinations
+    Route::get('/shippers/{shipper}/destinations', [ShipperDestinationController::class, 'index']);
+    Route::post('/shippers/{shipper}/destinations', [ShipperDestinationController::class, 'store']);
+    Route::get('/destinations/{destination}', [ShipperDestinationController::class, 'show']);
+    Route::put('/destinations/{destination}', [ShipperDestinationController::class, 'update']);
+    Route::patch('/destinations/{destination}', [ShipperDestinationController::class, 'update']);
+    Route::delete('/destinations/{destination}', [ShipperDestinationController::class, 'destroy']);
+
+
+    
+    // Shipping Rates (applicability per destination)
+    Route::get('/destinations/{destination}/shipping-rates', [ShipperShippingRateController::class, 'index']);
+    Route::post('/destinations/{destination}/shipping-rates', [ShipperShippingRateController::class, 'store']);
+    Route::put('/shipping-rates/{rate}', [ShipperShippingRateController::class, 'update']);
+    Route::patch('/shipping-rates/{rate}', [ShipperShippingRateController::class, 'update']);
+    Route::delete('/shipping-rates/{rate}', [ShipperShippingRateController::class, 'destroy']);
+
+
+    // Volume Rates (nested by destination)
+Route::get('/destinations/{destination}/volume-rates',   [ShipperVolumeRateController::class, 'index']);
+Route::post('/destinations/{destination}/volume-rates',  [ShipperVolumeRateController::class, 'store']);
+Route::put('/volume-rates/{rate}',   [ShipperVolumeRateController::class, 'update']);
+Route::patch('/volume-rates/{rate}', [ShipperVolumeRateController::class, 'update']);
+Route::delete('/volume-rates/{rate}',[ShipperVolumeRateController::class, 'destroy']);
+
+// Weight Rates (nested by destination)
+Route::get('/destinations/{destination}/weight-rates',   [ShipperWeightRateController::class, 'index']);
+Route::post('/destinations/{destination}/weight-rates',  [ShipperWeightRateController::class, 'store']);
+Route::put('/weight-rates/{rate}',   [ShipperWeightRateController::class, 'update']);
+Route::patch('/weight-rates/{rate}', [ShipperWeightRateController::class, 'update']);
+Route::delete('/weight-rates/{rate}',[ShipperWeightRateController::class, 'destroy']);
+
+
+
+// Heavy Vehicles (per shipper)
+Route::get('/shippers/{shipper}/vehicles', [HeavyVehicleController::class, 'index']);
+Route::post('/shippers/{shipper}/vehicles', [HeavyVehicleController::class, 'store']);
+Route::get('/vehicles/{vehicle}', [HeavyVehicleController::class, 'show']);
+Route::put('/vehicles/{vehicle}', [HeavyVehicleController::class, 'update']);
+Route::patch('/vehicles/{vehicle}', [HeavyVehicleController::class, 'update']);
+Route::delete('/vehicles/{vehicle}', [HeavyVehicleController::class, 'destroy']);
+
+// Heavy Rates (per destination & vehicle)
+Route::get('/destinations/{destination}/heavy-rates', [HeavyRateController::class, 'index']);
+Route::post('/destinations/{destination}/heavy-rates', [HeavyRateController::class, 'store']);
+Route::put('/heavy-rates/{rate}', [HeavyRateController::class, 'update']);
+Route::patch('/heavy-rates/{rate}', [HeavyRateController::class, 'update']);
+Route::delete('/heavy-rates/{rate}', [HeavyRateController::class, 'destroy']);
+
+     });
+
+
       Route::controller(ProductSpecificationProductController::class)->group(function () {
- 
-         
             Route::post('/product-specifications-update', 'storeOrUpdate');
             Route::post('/product-specification-products', 'store');
             Route::get('/product-specifications/{product}', 'getProductSpecificationsForEdit');
@@ -181,7 +258,25 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
       Route::controller(OrdersPlacedController::class)->group(function () {
 
             Route::get('/orders-placed', 'index');
+            Route::get('/orders-placed/packing', 'packing_index');
+            Route::get('/orders-placed/dispatch', 'dispatch_index');
+            Route::get('/orders-placed/shipment', 'shipment_index');
+            Route::get('/orders-placed/delivered', 'delivered_index');
+
+
+
+            
+           
+
             Route::post('/orders-placed', 'store');
+            Route::get('/orders-placed/pack/{id}','packing');
+            Route::get('/orders-placed/dispatch/{id}', 'dispatch');
+            Route::get('/orders-placed/shipment/{id}', 'shipment');
+            Route::get('/orders-placed/complete/{id}', 'complete');
+
+           
+
+
             Route::get('/orders-placed/{id}', 'show');
             Route::put('/orders-placed/{id}', 'update');
             Route::delete('/orders-placed/{id}', 'destroy');
@@ -199,16 +294,40 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
       });
 
 
+
+        Route::controller(RegionController::class)->group(function () {
+
+             Route::get('/regions', 'index');
+             Route::post('/regions', 'store');
+             Route::get('/regions/countries', 'countries_index');
+
+        });
+
+
         Route::controller(CityController::class)->group(function () {
 
-               Route::get('/cities',  'index');
-               Route::post('/cities',  'store');
-               Route::get('/cities/states',  'states_index');
-               Route::get('/cities/countries',  'countries_index');
+               Route::get('/geo/cities','index');
+               Route::post('/geo/cities','store');
+               Route::get('/cities/states','states_index');
+               Route::get('/cities/countries','countries_index');
                Route::get('/states/by-country/{countryId}','byCountry');
 
 
         });
+
+
+        Route::prefix('geo')->group(function () {
+    Route::get('/countries', [CountryController::class, 'index']);                   // list countries
+    Route::get('/regions',   [RegionController::class, 'index']);                    // ?country_id=
+    Route::get('/districts', [DistrictController::class, 'index']);                  // list (optional filters)
+    Route::post('/districts', [DistrictController::class, 'store']);                 // create
+    Route::get('/districts/{district}', [DistrictController::class, 'show']);        // single
+    Route::match(['put','patch'], '/districts/{district}', [DistrictController::class, 'update']); // update
+    Route::delete('/districts/{district}', [DistrictController::class, 'destroy']);  // delete
+
+       Route::get('/regions/by-country/{countryId}', [RegionController::class, 'byCountry']);
+    Route::get('/districts/by-region/{regionId}',   [DistrictController::class, 'byRegion']);
+});
   
 
    Route::post(RoutePath::for('logout', '/logout'), [AuthenticatedSessionController::class, 'destroy']);

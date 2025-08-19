@@ -31,6 +31,7 @@ return new class extends Migration
 
 
 
+           
         });
 
 
@@ -156,11 +157,11 @@ return new class extends Migration
 
             $table->string('City_Code', 30)->unique()->nullable();
 
-             
-             $table->foreignId('State_Id', 12)
-                    ->constrained('Geox_State_Master_T')
-                    ->onDelete('no action')
-                    ->nullable();
+            $table->unsignedBigInteger('State_Id')->nullable();
+
+            $table->foreign('State_Id')
+                ->references('id')->on('Geox_State_Master_T')
+                ->onDelete('no action');
 
             $table->string('City_Name', 50)->nullable();
             $table->string('City_Name_Ar', 50)->nullable();
@@ -462,10 +463,13 @@ return new class extends Migration
             ->onDelete('no action')
             ->nullable();
 
-           $table->foreignId('State_Id', 12)
-            ->constrained('Geox_State_Master_T')
-            ->onDelete('no action')
-            ->nullable();
+            $table->unsignedBigInteger('State_Id')->nullable();
+
+            $table->foreign('State_Id')
+                ->references('id')->on('Geox_State_Master_T')
+                ->onDelete('no action');
+
+       
 
           $table->foreignId('Country_Id', 12)
             ->constrained('Geox_Country_Master_T')
