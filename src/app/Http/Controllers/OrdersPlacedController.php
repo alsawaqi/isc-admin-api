@@ -109,9 +109,9 @@ class OrdersPlacedController extends Controller
                 'Actor_User_Id'    => Auth::id(),
                 'Actor_Name'       => 'Name',
                 'Actor_Role'       => 'accounting', // or whatever applies
-                'Signature_Storage'=> 'public',
-                'Signature_Url'    => $publicUrl,
-                'Signature_Mime'   => "image/{$ext}",
+               
+              
+           
                 'Signed_At'        => now(),
                 'Notes'            => $request->input('note'),
             ]);
