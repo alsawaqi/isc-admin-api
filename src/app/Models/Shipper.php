@@ -55,4 +55,17 @@ class Shipper extends Model
     {
         return $this->hasMany(ShipperHeavyRate::class, 'Shippers_Id', 'id');
     }
+
+
+    /** NEW: box sizes & box rates */
+    public function boxSizes()
+    {
+        return $this->hasMany(ShipperBoxSize::class, 'Shippers_Id', 'id')
+                    ->where('Shippers_Box_Is_Active', 1);
+    }
+
+    public function boxRates()
+    {
+        return $this->hasMany(ShipperBoxRate::class, 'Shippers_Id', 'id');
+    }
 }

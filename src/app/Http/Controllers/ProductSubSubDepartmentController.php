@@ -96,6 +96,7 @@ public function store(Request $request){
                                                     'Image_Size' => $imageSize,
                                                     'Image_Extension' => $imageExtension,
                                                     'Image_Type' => $imageType,
+                                                    'View_Options' => $request->View_Options,
                                                     'Created_Date' => now(),
                                                     'Created_By' => $request->user()->id,
                                             ]);

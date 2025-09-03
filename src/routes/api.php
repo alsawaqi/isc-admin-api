@@ -115,10 +115,9 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
           // Shippers
           Route::get('/shippers', [ShipperController::class, 'index']);
           Route::post('/shippers', [ShipperController::class, 'store']);
-          Route::get('/shippers/{shipper}', [ShipperController::class, 'show']);
-          Route::put('/shippers/{shipper}', [ShipperController::class, 'update']);
-          Route::patch('/shippers/{shipper}', [ShipperController::class, 'update']);
-          Route::delete('/shippers/{shipper}', [ShipperController::class, 'destroy']);
+          Route::get('/shippers/{id}', [ShipperController::class, 'show']);
+          Route::put('/shippers/{id}', [ShipperController::class, 'update']);
+          Route::delete('/shippers/{id}', [ShipperController::class, 'destroy']);
           Route::post('/shippers/{shipper}/toggle', [ShipperController::class, 'toggle']);
 
           // Contacts (nested)
@@ -269,13 +268,18 @@ Route::delete('/heavy-rates/{rate}', [HeavyRateController::class, 'destroy']);
            
 
             Route::post('/orders-placed', 'store');
-            Route::get('/orders-placed/pack/{id}','packing');
-            Route::get('/orders-placed/dispatch/{id}', 'dispatch');
-            Route::get('/orders-placed/shipment/{id}', 'shipment');
-            Route::get('/orders-placed/complete/{id}', 'complete');
 
-           
 
+        
+            Route::post('/orders-placed/{id}/pack','packing');
+
+
+            
+            Route::post('/orders-placed/{id}/dispatch', 'dispatch');
+            Route::post('/orders-placed/{id}/shipment', 'shipment');
+            Route::post('/orders-placed/complete/{id}', 'complete');
+
+           Route::get('/orders-placed/{id}/overview', 'overview');
 
             Route::get('/orders-placed/{id}', 'show');
             Route::put('/orders-placed/{id}', 'update');

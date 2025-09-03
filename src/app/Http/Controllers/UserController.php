@@ -47,7 +47,7 @@ class UserController extends Controller
 
     $validated = $request->validate([
         'User_Name' => 'required|string|max:255',
-        'Email' => 'required|email|unique:Secx_Admin_User_Master_T,email',
+        'email' => 'required|email|unique:Secx_Admin_User_Master_T,email',
        // 'password' => 'required|string|min:6|confirmed',
        
     ]);

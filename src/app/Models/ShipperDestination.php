@@ -43,4 +43,16 @@ class ShipperDestination extends Model
     {
         return $this->hasMany(ShipperHeavyRate::class, 'Shippers_Destination_Id', 'id');
     }
+
+      public function flags()
+    {
+        return $this->hasOne(ShipperShippingRate::class, 'Shippers_Destination_Id', 'id')
+                    ->where('Shippers_Id', $this->Shippers_Id);
+    }
+
+    /** NEW: box rates available for this destination */
+    public function boxRates()
+    {
+        return $this->hasMany(ShipperBoxRate::class, 'Shippers_Destination_Id', 'id');
+    }
 }

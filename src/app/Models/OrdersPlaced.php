@@ -25,4 +25,23 @@ class OrdersPlaced extends Model
     {
          return $this->hasMany(OrdersPlacedDetails::class, 'Orders_Placed_Id');
     }
+
+    public function transaction()
+    {
+        return $this->hasOne(SalesTransactionHeader::class, 'Orders_Placed_Id', 'id');
+    }
+
+
+    // app/Models/OrdersPlaced.php
+public function packagingDetails()
+{
+    return $this->hasMany(OrderPackageDetails::class, 'Orders_Placed_Id');
+}
+
+public function processLogs()
+{
+    return $this->hasMany(OrderProcessLog::class, 'Orders_Placed_Id');
+}
+
+
 }

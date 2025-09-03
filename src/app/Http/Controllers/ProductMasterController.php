@@ -51,12 +51,34 @@ class ProductMasterController extends Controller
                     $product_manufacture_id = $product_manufacture_id === '' ? null : $product_manufacture_id;
 
 
-                        $length = $request->Length_Cm;
-                        $width  = $request->Width_Cm;
-                        $height = $request->Height_Cm;
+                        
+                                        // Read raw input
+                    $rawL = (float) ($request->input('Length_Cm')  ?? 0);
+                    $rawW = (float) ($request->input('Width_Cm')   ?? 0);
+                    $rawH = (float) ($request->input('Height_Cm')  ?? 0);
 
-                        // Calculate CBM
-                        $cbm = ($length * $width * $height) / 1000000;
+                    // Conversion factors to meters
+                    $unit = strtolower($request->input('volume_type', 'cm'));
+                    $toMeters = [
+                        'mm' => 0.001,     // millimeter → meter
+                        'cm' => 0.01,      // centimeter → meter
+                        'm'  => 1.0,       // meter → meter
+                        'in' => 0.0254,    // inch → meter
+                        'ft' => 0.3048,    // foot → meter
+                    ];
+
+                    if (!isset($toMeters[$unit])) {
+                        return response()->json(['message' => 'Invalid volume_type'], 422);
+                    }
+                    $k = $toMeters[$unit];
+
+                    // Normalize to meters
+                    $L_m = round($rawL * $k, 4); // store up to 4 decimal places
+                    $W_m = round($rawW * $k, 4);
+                    $H_m = round($rawH * $k, 4);
+
+                    // Calculate CBM directly in meters³
+                    $cbm = round($L_m * $W_m * $H_m, 3);
 
                     $product = ProductMaster::create([
                                             'Product_Code' => $productMasterCode,
@@ -71,11 +93,14 @@ class ProductMasterController extends Controller
                                             'Product_Description' => $request->description,
                                             'Product_Price' => $request->price,
                                             'Product_Stock' => $request->stock,
+                                            'Product_Sku' => $request->product_sku, 
+                                            'volume_type' => $request->volume_type,
                                              'Weight_Kg' => $request->Weight_Kg,
-                                             'Length_Cm' => $request->Length_Cm,
-                                             'Width_Cm' => $request->Width_Cm,
-                                             'Height_Cm' => $request->Height_Cm,
-                                              'Volume_Cbm' => round($cbm, 4), // keep 4 decimals
+                                               
+                                            'Length_Cm'  => $L_m,
+                                            'Width_Cm'   => $W_m,
+                                            'Height_Cm'  => $H_m,
+                                            'Volume_Cbm' => $cbm,
                                             'Created_By' => Auth::id(),
                                             'Created_Date' => now(),
                                 ]);
