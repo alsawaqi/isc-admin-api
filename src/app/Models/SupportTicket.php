@@ -22,4 +22,16 @@ class SupportTicket extends Model
     {
         return $this->hasMany(SupportTicketMessage::class, 'Ticket_Id');
     }
+
+   // ✅ one-liner: fetch the latest message (so you don’t get a collection)
+   public function lastMessage()
+{
+    return $this->hasOne(SupportTicketMessage::class, 'Ticket_Id')->latestOfMany();
+}
+
+    // ✅ your new relation
+    public function customer()
+    {
+        return $this->belongsTo(Customers::class, 'Customer_Id');
+    }
 }

@@ -27,21 +27,21 @@ use App\Http\Controllers\ShipperWeightRateController;
 use App\Http\Controllers\ProductDepartmentsController;
 use App\Http\Controllers\ProductManufactureController;
 use App\Http\Controllers\ShipperDestinationController;
+use App\Http\Controllers\SupportTicketAdminController;
 use App\Http\Controllers\ShipperShippingRateController;
 use App\Http\Controllers\ProductSubDepartmentController;
 use App\Http\Controllers\ProductSubSubDepartmentController;
 use App\Http\Controllers\ProductSpecificationProductController;
 use App\Http\Controllers\ProductSpecificationDescriptionController;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
+
+
+ 
  
 
 Route::group(['middleware' => 'auth:sanctum'], function () {
 
-   
-
-     
  
-
    Route::get('/user', function (Request $request) {
         $user = $request->user();
 
@@ -59,6 +59,15 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
                Route::post('/users', 'store');
                Route::get('/users-with-roles', 'getUsersWithRoles');
 
+    });
+
+
+
+    Route::controller(SupportTicketAdminController::class)->group(function () {
+            Route::get('/admin/support-tickets', 'index');
+            Route::get('/admin/support-tickets/{id}', 'show');
+            Route::post('/admin/support-tickets/{id}/reply', 'reply');
+            Route::patch('/admin/support-tickets/{id}/status', 'updateStatus');
     });
 
 

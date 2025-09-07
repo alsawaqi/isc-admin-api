@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use App\Models\OrderProcessLog;
 use Illuminate\Support\Facades\DB;
 use App\Models\OrderPackageDetails;
+use App\Models\OrdersPlacedDetails;
 use Illuminate\Support\Facades\Auth;
 use App\Models\SalesTransactionHeader;
 use App\Models\SalesTransactionDetails;
@@ -51,16 +52,16 @@ class OrdersPlacedController extends Controller
 
     public function show($id)
     {
-          $order = OrdersPlaced::with([
-                                        'customerContact',
-                                        'shipper',
-                                        'orderlist',
-                                        'orderlist.product',
-                                        'transaction',
-                                        'transaction.details'
-                                    ])->findOrFail($id);
-          return response()->json($order);
-}
+            $order = OrdersPlaced::with([
+                                            'customerContact',
+                                            'shipper',
+                                            'orderlist',
+                                            'orderlist.product',
+                                            'transaction',
+                                            'transaction.details'
+                                        ])->findOrFail($id);
+            return response()->json($order);
+    }
 
 
    public function packing(Request $request, $id){
@@ -68,10 +69,14 @@ class OrdersPlacedController extends Controller
 
             $order = OrdersPlaced::findOrFail($id);
 
+            $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
 
             $saleheader = SalesTransactionHeader::where('Orders_Placed_Id', $order->id)->first();
 
              $salesdetails = SalesTransactionDetails::where('Sales_Transaction_Header_Id', $saleheader->id)->first();
+
+
+             DB::transaction(function () use ($request, $order, $orderplacedetail, $salesdetails) {
 
              $salesdetails->update(['Payment_Status' => 'confirmed']);
 
@@ -102,18 +107,30 @@ class OrdersPlacedController extends Controller
             // update order status + write process log
             $order->update(['Status' => 'packed']);
 
+              foreach($orderplacedetail as $detail){
+
+                    $detail->update(['Status' => 'packed']);
+              }
+
             OrderProcessLog::create([
                 'Orders_Placed_Id' => $order->id,
                 'Step_Code'        => 'PACKING_CONFIRMED',
-                'Status'           => 'done',
+                'Status'           => 'Packed',
+                'Is_External'      => false,
                 'Actor_User_Id'    => Auth::id(),
                 'Actor_Name'       => 'Name',
                 'Actor_Role'       => 'accounting', // or whatever applies
                 'Signed_At'        => now(),
+                'Signature_Storage'=> 'test',        // storage path under public disk
+                'Signature_Url'     => 'tttt',    // public URL
+                'Signature_Mime'    => '$sigMime' ?: 'image/png',
                 'Notes'            => $request->input('note'),
             ]);
 
+       
+
             return response()->json(['ok' => true, 'url' => $publicUrl]);
+             });
 
     }
 
@@ -131,8 +148,9 @@ class OrdersPlacedController extends Controller
         ]);
 
         $order = OrdersPlaced::findOrFail($id);
+        $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
 
-        return DB::transaction(function () use ($request, $order) {
+        return DB::transaction(function () use ($request, $order, $orderplacedetail) {
 
             // 1) Save any photos to Orders_Packaging_Details_T (simple loop, no extra rules)
             $evidence = [];
@@ -178,6 +196,11 @@ class OrdersPlacedController extends Controller
             // 3) Flip status → processing
             $order->update(['Status' => 'processing']);
 
+             foreach($orderplacedetail as $detail){
+
+                    $detail->update(['Status' => 'processing']);
+              }
+
             return response()->json([
                 'message'        => 'Dispatched (processing) recorded.',
                 'order_id'       => $order->id,
@@ -217,8 +240,8 @@ class OrdersPlacedController extends Controller
         abort(422, 'Invalid signature.');
     }
 
-      public function shipment(Request $request,$id)
-      {
+      public function shipment(Request $request,$id){
+
             $order = OrdersPlaced::findOrFail($id);
 
   

@@ -12,6 +12,7 @@ class SupportTicketMessage extends Model
         'Ticket_Id',
         'Sender_Type',
         'Message_Body',
+        'Admin_Id',
     ];
 
     public function ticket()
