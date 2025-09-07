@@ -120,6 +120,9 @@ class OrdersPlacedController extends Controller
                 'Actor_User_Id'    => Auth::id(),
                 'Actor_Name'       => 'Name',
                 'Actor_Role'       => 'accounting', // or whatever applies
+                 'Is_External'      => 1,
+              
+           
                 'Signed_At'        => now(),
                 'Signature_Storage'=> 'test',        // storage path under public disk
                 'Signature_Url'     => 'tttt',    // public URL
