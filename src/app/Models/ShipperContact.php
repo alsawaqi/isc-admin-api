@@ -9,7 +9,7 @@ class ShipperContact extends Model
     protected $table = 'Shipper_Contacts_T';
 
     protected $fillable = [
-        'Shippers_Id','Shippers_Contact_Name','Shippers_Contact_Position',
+        'Shippers_Id','Contact_Department_Id','Shippers_Contact_Name','Shippers_Contact_Position',
         'Shippers_Contact_Office_No','Shippers_Contact_GSM_No',
         'Shippers_Contact_Email_Address','Shippers_Is_Primary'
     ];

@@ -142,6 +142,7 @@ class ShipperController extends Controller
             }
             ShipperContact::create([
                 'Shippers_Id'                      => $shipper->id,
+                'Contact_Department_Id'            => $c['Contact_Department_Id'] ?? null,
                 'Shippers_Contact_Name'            => $c['Shippers_Contact_Name'],
                 'Shippers_Contact_Position'        => $c['Shippers_Contact_Position'] ?? null,
                 'Shippers_Contact_Office_No'       => $c['Shippers_Contact_Office_No'] ?? null,

@@ -245,9 +245,13 @@ class OrdersPlacedController extends Controller
 
       public function shipment(Request $request,$id){
 
-            $order = OrdersPlaced::findOrFail($id);
+                 $order = OrdersPlaced::findOrFail($id);
 
-  
+                $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
+
+     DB::transaction(function () use ($request, $order, $orderplacedetail) {
+
+                   
 
                 // Expect data URL "data:image/png;base64,..."
                 $dataUrl = (string) $request->input('signature');
@@ -282,22 +286,29 @@ class OrdersPlacedController extends Controller
                     'Actor_Name'        => optional(Auth::user())->User_Name,
                     'Actor_Role'        => optional(Auth::user())->role, // adjust if different
                     'Is_External'       => false,
-                       // storage path under public disk
+               
                     'Signature_Url'     => $publicUrl,   // public URL
                     'Signature_Mime'    => "image/{$ext}",
                     'Signed_At'         => now(),
                     'Notes'             => $request->input('note'),
                 ]);
+              
+                 foreach($orderplacedetail as $detail){
+                            $detail->update(['Status' => 'shipped']);
+                      }
 
-                return response()->json(['ok' => true, 'url' => $publicUrl]);
+
+                 return response()->json(['ok' => true, 'url' => $publicUrl]);
+                });
 
 
 
       }
 
 
-      public function overview($id)
-    {
+ public function overview($id){
+
+
         $order = OrdersPlaced::with([
             'customerContact',
             'shipper',
@@ -369,10 +380,20 @@ class OrdersPlacedController extends Controller
     }
 
 
-      public function complete($id)
-      {
+    public function complete($id)
+    {
+        
             $order = OrdersPlaced::where('id', $id)
                                     ->firstOrFail();
-            $order->update(['Status' => 'delivered']);
-      }
+
+           $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
+           DB::transaction(function () use ($order, $orderplacedetail) {
+                         foreach($orderplacedetail as $detail){
+    
+                        $detail->update(['Status' => 'delivered']);
+                }
+               $order->update(['Status' => 'delivered']);
+           });
+               
+    }
 }

@@ -24,6 +24,7 @@ use App\Http\Controllers\ShipperContactController;
 use App\Http\Controllers\ProductsBarcodesController;
 use App\Http\Controllers\ShipperVolumeRateController;
 use App\Http\Controllers\ShipperWeightRateController;
+use App\Http\Controllers\ContactDepartmentsController;
 use App\Http\Controllers\ProductDepartmentsController;
 use App\Http\Controllers\ProductManufactureController;
 use App\Http\Controllers\ShipperDestinationController;
@@ -296,6 +297,13 @@ Route::delete('/heavy-rates/{rate}', [HeavyRateController::class, 'destroy']);
 
       });
 
+
+
+
+      Route::controller(ContactDepartmentsController::class)->group(function () {
+          Route::get('/contact/departments', 'index');
+          Route::post('/contact/departments', 'store');
+      });
 
 
 
