@@ -288,6 +288,7 @@ Route::delete('/heavy-rates/{rate}', [HeavyRateController::class, 'destroy']);
             Route::post('/orders-placed/{id}/dispatch', 'dispatch');
             Route::post('/orders-placed/{id}/shipment', 'shipment');
             Route::post('/orders-placed/complete/{id}', 'complete');
+            Route::post('/orders-placed/{id}/cancel', 'cancel');
 
            Route::get('/orders-placed/{id}/overview', 'overview');
 

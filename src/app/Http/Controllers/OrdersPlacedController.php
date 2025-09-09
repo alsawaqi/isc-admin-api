@@ -78,65 +78,112 @@ class OrdersPlacedController extends Controller
 
              DB::transaction(function () use ($request, $order, $orderplacedetail, $salesdetails) {
 
-             $salesdetails->update(['Payment_Status' => 'confirmed']);
+                    $salesdetails->update(['Payment_Status' => 'confirmed']);
+                    // Expect a data URL from the client: "data:image/png;base64,AAAA..."
+                    $dataUrl = (string) $request->input('signature');
+                    if (!preg_match('/^data:image\/(png|jpeg|jpg);base64,/', $dataUrl, $m)) {
+                        return response()->json(['message' => 'Invalid signature data URL'], 422);
+                    }
 
-              
-            // Expect a data URL from the client: "data:image/png;base64,AAAA..."
-            $dataUrl = (string) $request->input('signature');
-            if (!preg_match('/^data:image\/(png|jpeg|jpg);base64,/', $dataUrl, $m)) {
-                return response()->json(['message' => 'Invalid signature data URL'], 422);
+                    $ext = $m[1] === 'jpg' ? 'jpeg' : $m[1];
+                    $binary = base64_decode(substr($dataUrl, strpos($dataUrl, ',') + 1));
+
+                    if ($binary === false) {
+                        return response()->json(['message' => 'Could not decode signature'], 422);
+                    }
+
+                    $dir = "signatures/orders/{$order->id}";
+                    // ensure directory exists under the *public* disk root: storage/app/public
+                    Storage::disk('public')->makeDirectory($dir);
+
+                    $filename = 'signature_'.now()->format('Ymd_His').'_'.Str::random(6).'.'.$ext;
+                    $path = "$dir/$filename";
+
+                    Storage::disk('public')->put($path, $binary, 'public'); // visibility = public
+                    $publicUrl = Storage::url($path); // => /storage/signatures/orders/ID/filename.png
+
+                    // update order status + write process log
+                    $order->update(['Status' => 'packed']);
+
+                    foreach($orderplacedetail as $detail){
+
+                            $detail->update(['Status' => 'packed']);
+                    }
+
+                    OrderProcessLog::create([
+                        'Orders_Placed_Id' => $order->id,
+                        'Step_Code'        => 'PACKING_CONFIRMED',
+                        'Status'           => 'Packed',
+                        'Is_External'      => false,
+                        'Actor_User_Id'    => Auth::id(),
+                        'Actor_Name'       => 'Name',
+                        'Actor_Role'       => 'accounting', // or whatever applies
+                        'Is_External'      => 1,
+                        'Signed_At'        => now(),
+                        'Signature_Storage'=> 'test',        // storage path under public disk
+                        'Signature_Url'     => 'tttt',    // public URL
+                        'Signature_Mime'    => '$sigMime' ?: 'image/png',
+                        'Notes'            => $request->input('note'),
+                    ]);
+
+            
+
+                    return response()->json(['ok' => true, 'url' => $publicUrl]);
+                    });
+
             }
 
-            $ext = $m[1] === 'jpg' ? 'jpeg' : $m[1];
-            $binary = base64_decode(substr($dataUrl, strpos($dataUrl, ',') + 1));
 
-            if ($binary === false) {
-                return response()->json(['message' => 'Could not decode signature'], 422);
-            }
 
-            $dir = "signatures/orders/{$order->id}";
-            // ensure directory exists under the *public* disk root: storage/app/public
-            Storage::disk('public')->makeDirectory($dir);
+            public function cancel(Request $request, $id){
 
-            $filename = 'signature_'.now()->format('Ymd_His').'_'.Str::random(6).'.'.$ext;
-            $path = "$dir/$filename";
 
-            Storage::disk('public')->put($path, $binary, 'public'); // visibility = public
-            $publicUrl = Storage::url($path); // => /storage/signatures/orders/ID/filename.png
+                    $order = OrdersPlaced::findOrFail($id);
 
-            // update order status + write process log
-            $order->update(['Status' => 'packed']);
+                    $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
 
-              foreach($orderplacedetail as $detail){
+                    $saleheader = SalesTransactionHeader::where('Orders_Placed_Id', $order->id)->first();
 
-                    $detail->update(['Status' => 'packed']);
-              }
+                    //$salesdetails = SalesTransactionDetails::where('Sales_Transaction_Header_Id', $saleheader->id)->first();
 
-            OrderProcessLog::create([
-                'Orders_Placed_Id' => $order->id,
-                'Step_Code'        => 'PACKING_CONFIRMED',
-                'Status'           => 'Packed',
-                'Is_External'      => false,
-                'Actor_User_Id'    => Auth::id(),
-                'Actor_Name'       => 'Name',
-                'Actor_Role'       => 'accounting', // or whatever applies
-                 'Is_External'      => 1,
-              
-           
-                'Signed_At'        => now(),
-                'Signature_Storage'=> 'test',        // storage path under public disk
-                'Signature_Url'     => 'tttt',    // public URL
-                'Signature_Mime'    => '$sigMime' ?: 'image/png',
-                'Notes'            => $request->input('note'),
-            ]);
+
+                    DB::transaction(function () use ($request, $order, $orderplacedetail, ) {
+
+                    //   $salesdetails->update(['Payment_Status' => 'cancelled']);
+        
+                    // update order status + write process log
+                    $order->update(['Status' => 'cancelled']);
+
+                    foreach($orderplacedetail as $detail){
+
+                            $detail->update(['Status' => 'cancelled']);
+                    }
+
+                    OrderProcessLog::create([
+                        'Orders_Placed_Id' => $order->id,
+                        'Step_Code'        => 'CANCELLED',
+                        'Status'           => 'Cancelled',
+                        'Is_External'      => false,
+                        'Actor_User_Id'    => Auth::id(),
+                        'Actor_Name'       => 'Name',
+                        'Actor_Role'       => 'accounting', // or whatever applies
+                        'Is_External'      => 1,
+                        'Signed_At'        => now(),
+                        'Signature_Storage'=> 'test',        // storage path under public disk
+                        'Signature_Url'     => 'tttt',    // public URL
+                        'Signature_Mime'    => '$sigMime' ?: 'image/png',
+                        'Notes'            => $request->input('note'),
+                    ]);
 
        
 
-            return response()->json(['ok' => true, 'url' => $publicUrl]);
+                return response()->json(['ok' => true]);
+
+
+
              });
 
     }
-
        
 
     public function dispatch(Request $request, $id)
