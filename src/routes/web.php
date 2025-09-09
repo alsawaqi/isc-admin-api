@@ -10,16 +10,10 @@ use App\Http\Controllers\PostController;
 use App\Http\Controllers\Auth\LoginController;
 
  
-
 Route::get('/', function () {
      echo "Welcome to the Laravel Applications to if it works!";
 });
 
-
-Route::view('/upload-file', 'upload');
-
-
-Route::post('/upload-file', [FileController::class, 'upload'])->name('upload.file');
 
 
  
