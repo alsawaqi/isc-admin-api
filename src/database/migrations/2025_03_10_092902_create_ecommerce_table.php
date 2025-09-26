@@ -815,7 +815,7 @@ return new class extends Migration
             $table->string('Transaction_Number')->unique();
             $table->foreignId('Customers_Contacts_Id')->constrained('Customers_Contact_T')->onDelete('no action');  
             $table->foreignId('Customers_Id')->constrained('Customers_Master_T')->onDelete('no action');
-            $table->decimal('Total_Price', 10, 2);
+            $table->decimal('Total_Price', 10, 3);
             $table->enum('Status', ['pending', 'processing', 'packed', 'dispatched', 'shipped', 'delivered', 'cancelled'])->default('pending');
            $table->timestamps();
         });
