@@ -6,18 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class ShipperDestination extends Model
 {
-        protected $table = 'Shipper_Destinations_T';
+    protected $table = 'Shipper_Destinations_T';
 
-    protected $fillable = [
-        'Shippers_Id',
-        'Shippers_Destination_Country',
-        'Shippers_Destination_Region',
-        'Shippers_Destination_District',
-        'Shippers_Destination_Rate_Applicability',
-        'Shippers_Destination_Country_Preference',
-        'Shippers_Destination_Region_Preference',
-        'Shippers_Destination_District_Preference',
-    ];
+    protected $guarded = [];
 
     public function shipper()
     {
@@ -44,15 +35,22 @@ class ShipperDestination extends Model
         return $this->hasMany(ShipperHeavyRate::class, 'Shippers_Destination_Id', 'id');
     }
 
-      public function flags()
+    public function flags()
     {
         return $this->hasOne(ShipperShippingRate::class, 'Shippers_Destination_Id', 'id')
-                    ->where('Shippers_Id', $this->Shippers_Id);
+            ->where('Shippers_Id', $this->Shippers_Id);
     }
 
     /** NEW: box rates available for this destination */
     public function boxRates()
     {
         return $this->hasMany(ShipperBoxRate::class, 'Shippers_Destination_Id', 'id');
+    }
+
+
+    public function volumetricRule()
+    {
+        return $this->hasOne(ShipperVolumetricRule::class, 'Shippers_Destination_Id', 'id')
+            ->where('Shippers_Id', $this->Shippers_Id);
     }
 }

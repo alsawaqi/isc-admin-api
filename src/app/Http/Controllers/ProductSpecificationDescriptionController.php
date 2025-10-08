@@ -41,7 +41,6 @@ public function index(Request $request)
  
 public function store(Request $request)
 {
-
     $validated = $request->validate([
         'sub_sub_category_id'   => ['required','integer','exists:Products_Sub_Sub_Department_T,id'],
         'specs'                 => ['required','array','min:1'],
@@ -50,71 +49,63 @@ public function store(Request $request)
         'specs.*.is_required'   => ['boolean'],
         'specs.*.is_active'     => ['boolean'],
         'specs.*.sort_order'    => ['integer'],
-        'specs.*.values'        => ['nullable','array'],          // allow omitted
-        'specs.*.values.*'      => ['nullable','string','max:255'],
+
+        // allow string arrays, and require when select/multiselect
+        'specs.*.values'        => ['nullable','array'],
+        'specs.*.values.*'      => ['nullable','string','max:255'],               
     ]);
 
-     try{
+    try {
+        DB::transaction(function () use ($validated) {
+            foreach ($validated['specs'] as $i => $spec) {
 
-    
+                // Normalize values: handle both ["Red","Blue"] and [{"value":"Red"}, {"value":"Blue"}]
+                $values = collect($spec['values'] ?? [])
+                    ->map(function ($v) {
+                        if (is_array($v)) {
+                            return trim((string)($v['value'] ?? ''));
+                        }
+                        return trim((string)$v);
+                    })
+                    ->filter() // remove empties
+                    ->unique(fn ($v) => mb_strtolower($v)) // case-insensitive unique
+                    ->values();
 
-    DB::transaction(function () use ($validated) {
-        foreach ($validated['specs'] as $i => $spec) {
-            $desc = ProductSpecificationDescription::create([
-                'product_sub_sub_department_id'           => $validated['sub_sub_category_id'],
-                'Product_Specification_Description_Name'  => $spec['name'],
-                'input_type'   => $spec['input_type'],
-                'options_json' => !empty($spec['values'])
-                                    ? json_encode(
-                                        collect($spec['values'])
-                                        ->map(fn ($v) => trim((string)$v))
-                                        ->filter()
-                                        ->unique(fn ($v) => mb_strtolower($v))
-                                        ->values()
-                                        ->all(),
-                                        JSON_UNESCAPED_UNICODE
-                                    )
-                                    : null,// keep if you want it for UI; otherwise set null
-                'is_required'  => $spec['is_required'] ?? false,
-                'sort_order'   => $spec['sort_order'] ?? ($i + 1),
-                'is_active'    => $spec['is_active'] ?? false,
-                'Created_By' => Auth::id()
-            ]);
+                $desc = ProductSpecificationDescription::create([
+                    'product_sub_sub_department_id'          => $validated['sub_sub_category_id'],
+                    'Product_Specification_Description_Name' => $spec['name'],
+                    'input_type'   => $spec['input_type'],
+                    // keep options_json for UI filters if you want
+                    'options_json' => $values->isNotEmpty()
+                        ? json_encode($values->all(), JSON_UNESCAPED_UNICODE)
+                        : null,
+                    'is_required'  => $spec['is_required'] ?? false,
+                    'sort_order'   => $spec['sort_order'] ?? ($i + 1),
+                    'is_active'    => $spec['is_active'] ?? false,
+                    'Created_By'   => Auth::id(),
+                ]);
 
-            // Seed Product_Specification_Value_T for ANY type if values provided
-            $values = collect($spec['values'] ?? [])
-                ->map(fn ($v) => trim((string) $v))
-                ->filter()                                        // remove empties
-                ->unique(fn ($v) => mb_strtolower($v))            // case-insensitive unique
-                ->values();
-
-            foreach ($values as $val) {
-                ProductSpecificationValue::firstOrCreate(
-                    [
-                        'product_specification_description_id' => $desc->id,
-                        'value' => $val,
-                    ],
-                    [
-                        'normalized_value' => mb_strtolower($val),
-                        'slug' => Str::slug($val),
-                    ]
-                );
+                // Seed Product_Specification_Value_T
+                foreach ($values as $val) {
+                    ProductSpecificationValue::firstOrCreate(
+                        [
+                            'product_specification_description_id' => $desc->id,
+                            'value' => $val,
+                        ],
+                        [
+                            'normalized_value' => mb_strtolower($val),
+                            'slug' => Str::slug($val),
+                        ]
+                    );
+                }
             }
-        }
-    });
+        });
 
-    return response()->json(['message' => 'Specifications saved'], 201);
-
-
-    }catch (\Exception $e) {
-        return response()->json(['error' => 'Failed to save specifications: ' . $e->getMessage()], 500);
-    } 
-     
-    
-        
- 
+        return response()->json(['message' => 'Specifications saved'], 201);
+    } catch (\Throwable $e) {
+        return response()->json(['error' => 'Failed to save specifications: '.$e->getMessage()], 500);
+    }
 }
-
 
 public function getfilter(Request $request)
 {

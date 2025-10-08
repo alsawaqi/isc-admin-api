@@ -11,6 +11,7 @@ use App\Http\Controllers\RegionController;
 use App\Http\Controllers\CountryController;
 use App\Http\Controllers\ShipperController;
 use App\Http\Controllers\DistrictController;
+use App\Http\Controllers\CustomersController;
 use App\Http\Controllers\HeavyRateController;
 use App\Http\Controllers\HeavyVehicleController;
 use App\Http\Controllers\OrdersPlacedController;
@@ -119,6 +120,13 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
      
     
    });
+
+
+   Route::controller(CustomersController::class)->group(function () {
+
+       Route::get('/customers', 'index');
+ 
+   }); 
 
 
    Route::prefix('v1/shipping')->group(function () {

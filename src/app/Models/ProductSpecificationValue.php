@@ -9,6 +9,8 @@ class ProductSpecificationValue extends Model
     //
 
     protected $table = 'Product_Specification_Value_T';
+    protected $primaryKey = 'id';
+    public $timestamps = true;
 
     protected $guarded = [];
 
