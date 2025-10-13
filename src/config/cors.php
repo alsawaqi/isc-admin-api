@@ -8,8 +8,8 @@ return [
 
     'allowed_origins' => [
         'http://localhost:82',
-        'https://abdallahweb.com',
-        'https://admin.abdallahweb.com',
+        'https://avinaq.com',
+        'https://admin.avinaq.com',
     ],
 
     'allowed_origins_patterns' => [],
