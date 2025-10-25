@@ -28,4 +28,16 @@ class ProductManufactureController extends Controller
 
         return response()->json(['message' => 'Product manufacture created successfully'], 201);
     }
+
+    public function update(Request $request, ProductManufacture $productmanufacture)
+    {
+        $productmanufacture->Products_Manufacture_Name = $request->name;
+        $productmanufacture->Products_Manufacture_Name_Ar = $request->name;
+        if ($request->has('product_department_id')) {
+            $productmanufacture->Product_Department_Id = $request->product_department_id;
+        }
+        $productmanufacture->save();
+
+        return response()->json(['message' => 'Product manufacture updated successfully'], 200);
+    }
 }

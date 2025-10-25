@@ -49,5 +49,25 @@ class ProductBrandsController extends Controller
 
         return response()->json(['message' => 'Product brand created successfully'], 201);
     }
+
+    public function update(Request $request, ProductBrands $productbrand)
+{
+    $productbrand->Products_Brands_Name = $request->name;
+
+    if ($request->hasFile('image')) {
+        // delete old file if exists...
+        $file = $request->file('image');
+        $path = Storage::disk('r2')->put('brands', $file, 'public');
+        $productbrand->Brands_Image_Path = $path;
+        // etc metadata...
+    } elseif ($request->input('remove_image') === '1') {
+        // delete + null fields
+        $productbrand->Brands_Image_Path = null;
+    }
+
+    $productbrand->save();
+
+    return response()->json(['success' => true, 'data' => $productbrand]);
+}
     //
 }

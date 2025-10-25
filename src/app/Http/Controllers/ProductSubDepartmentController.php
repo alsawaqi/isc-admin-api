@@ -79,6 +79,37 @@ class ProductSubDepartmentController extends Controller
     }
 
 
+    public function update(ProductSubDepartment $productsubdepartment, Request $request)
+    {
+        try {
+            $productsubdepartment->Sub_Department_Name = $request->name;
+
+            if ($request->hasFile('image')) {
+                if ($productsubdepartment->Image_path) {
+                    Storage::disk('r2')->delete($productsubdepartment->Image_path);
+                }
+
+                $file = $request->file('image');
+                $path = Storage::disk('r2')->put('subdepartment', $file, 'public');
+
+                $productsubdepartment->Image_path      = $path;
+                $productsubdepartment->Image_Size      = $file->getSize();
+                $productsubdepartment->Image_Extension = $file->getClientOriginalExtension();
+                $productsubdepartment->Image_Type      = $file->getMimeType();
+            }
+
+            $productsubdepartment->save();
+
+            return response()->json([
+                'message' => 'Product Sub Department updated successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error updating Product Sub Department: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function destroy(ProductSubDepartment $productsubdepartment)
     {
 

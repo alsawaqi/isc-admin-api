@@ -76,6 +76,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::controller(ProductDepartmentsController::class)->group(function () {
         Route::get('/productdepartment', 'index');
         Route::post('/productdepartment', 'store');
+        Route::post('/productdepartment/{productdepartment}', 'update');
         Route::get('/sub-departments/{departmentId}', 'getSubDepartments');
         Route::get('/sub-sub-departments/{subDepartmentId}', 'bySubDepartment');
         Route::delete('/productdepartment/{productdepartment}', 'destroy');
@@ -87,6 +88,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
         Route::get('/productbrands', 'index');
         Route::post('/productbrands', 'store');
+        Route::post('/productbrands/{productbrand}', 'update');
     });
 
 
@@ -195,6 +197,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::controller(ProductManufactureController::class)->group(function () {
         Route::get('/productmanufacture', 'index');
         Route::post('/productmanufacture', 'store');
+        Route::post('/productmanufacture/{productmanufacture}', 'update');
     });
 
 
@@ -202,6 +205,8 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::controller(ProductTypesController::class)->group(function () {
         Route::get('/producttype', 'index');
         Route::post('/producttype', 'store');
+        Route::put('/producttype/{producttype}', 'update');
+
     });
 
 
@@ -210,6 +215,9 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/product-departments-with-sub', 'getWithSubDepartments');
         Route::post('/productsubdepartment', 'store');
         Route::delete('/productsubdepartment/{productsubdepartment}', 'destroy');
+        Route::post('/productsubdepartment/{productsubdepartment}', 'update');
+
+        
     });
 
 
@@ -228,7 +236,10 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/full-product-department-tree', 'getFullDepartmentTree');
         Route::get('/sub-sub-departments', 'index');
         Route::post('/sub-sub-departments', 'store');
+        Route::post('/sub-sub-departments/{subsub}', 'update');
         Route::delete('/sub-sub-departments/{productsubsub}', 'destroy');
+
+         
     });
 
 
@@ -248,6 +259,8 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
         Route::get('/countries', 'index');
         Route::post('/countries', 'store');
+        Route::put('/countries/{country}', 'update');
+        Route::delete('/countries/{country}', 'destroy');
     });
 
 
@@ -307,6 +320,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
         Route::get('/regions', 'index');
         Route::post('/regions', 'store');
+        Route::put('/regions/{region}', 'update');
         Route::get('/regions/countries', 'countries_index');
     });
 
@@ -315,6 +329,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
         Route::get('/geo/cities', 'index');
         Route::post('/geo/cities', 'store');
+        Route::put('/geo/cities/{city}', 'update');
         Route::get('/cities/states', 'states_index');
         Route::get('/cities/countries', 'countries_index');
         Route::get('/states/by-country/{countryId}', 'byCountry');

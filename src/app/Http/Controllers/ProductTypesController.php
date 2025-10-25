@@ -32,4 +32,14 @@ class ProductTypesController extends Controller
 
         return response()->json(['message' => 'Product type created successfully', 'data' => ''], 201);
     }
+
+
+    public function update(ProductTypes $producttype, Request $request)
+    {
+        $producttype->Product_Types_Name = $request->name;
+       
+        $producttype->save();
+
+        return response()->json(['message' => 'Product type updated successfully', 'data' => ''], 200);
+    }
 }

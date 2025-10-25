@@ -83,9 +83,9 @@ class DistrictController extends Controller
        
     }
 
-    public function update(UpdateDistrictRequest $request, District $district)
+    public function update(Request $request, District $district)
     {
-        $district->update($request->validated());
+        $district->update($request->all());
         $district->load(['region:id,Region_Name,Country_Id']);
         return $district;
     }
