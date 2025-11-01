@@ -109,8 +109,8 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/productmaster', 'index');
         Route::get('/latest-products', 'getLatestProducts');
         Route::post('/productmaster', 'store');
-        Route::get('/productmaster/{id}', 'show');
-        Route::put('/productmaster/{id}', 'update');
+        Route::get('/productmaster/{productmaster}', 'show');
+        Route::put('/productmaster/{productmaster}', 'update');
         Route::delete('/productmaster/{productmaster}', 'destroy');
     });
 
