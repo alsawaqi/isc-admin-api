@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\CustomerType;
 use App\Models\SecurityRole;
 use Illuminate\Http\Request;
 use Laravel\Fortify\RoutePath;
@@ -13,6 +14,7 @@ use App\Http\Controllers\ShipperController;
 use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\CustomersController;
 use App\Http\Controllers\HeavyRateController;
+use App\Http\Controllers\CustomerTypeController;
 use App\Http\Controllers\HeavyVehicleController;
 use App\Http\Controllers\OrdersPlacedController;
 use App\Http\Controllers\ProductTypesController;
@@ -120,6 +122,12 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/customers', 'index');
     });
 
+
+    Route::controller(CustomerTypeController::class)->group(function () {
+
+        Route::get('/customer-types', 'index');
+        Route::post('/customer-types', 'store');
+    });
 
     Route::prefix('v1/shipping')->group(function () {
         // Shippers
