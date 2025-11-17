@@ -12,10 +12,13 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, HasApiTokens, Notifiable , HasRoles;
+    use HasFactory, HasApiTokens, Notifiable, HasRoles;
 
 
     protected $table = 'Secx_Admin_User_Master_T';
+
+
+ 
 
     /**
      * The attributes that are mass assignable.
@@ -41,12 +44,12 @@ class User extends Authenticatable
 
 
     public function scopeFindByEmail($query, $value)
-{
-    return $query->where('Email', $value);
-}
+    {
+        return $query->where('Email', $value);
+    }
 
 
-   
+
     /**
      * Get the attributes that should be cast.
      *
@@ -58,5 +61,12 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+
+  public function notifications()
+    {
+        return $this->morphMany(\App\Models\ConxDatabaseNotification::class, 'notifiable')
+            ->orderBy('created_at', 'desc');
     }
 }

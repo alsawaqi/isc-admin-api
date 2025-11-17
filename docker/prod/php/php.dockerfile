@@ -1,6 +1,6 @@
 FROM php:8.3.7-fpm
 
-COPY docker/dev/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+COPY docker/prod/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
@@ -36,8 +36,11 @@ RUN apt-get update && ACCEPT_EULA=Y apt-get install -y \
 RUN pecl install pdo_sqlsrv sqlsrv \
     && docker-php-ext-enable pdo_sqlsrv sqlsrv
 
-# Install default PHP extensions
+# ✅ Install default PHP extensions
 RUN docker-php-ext-install pdo opcache
+
+# ✅ ADD THIS: install pcntl so Reverb can catch signals
+RUN docker-php-ext-install pcntl
 
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
@@ -54,6 +57,6 @@ RUN mkdir -p storage/logs bootstrap/cache \
 COPY docker/prod/php/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]    
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 CMD ["php-fpm"]

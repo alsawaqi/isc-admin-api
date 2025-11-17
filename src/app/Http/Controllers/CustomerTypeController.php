@@ -30,5 +30,24 @@ class CustomerTypeController extends Controller
 
         return response()->json($customerType, 201);
     }
+
+
+    public function update(Request $request, CustomerType $customertype)
+    {
+        $customertype->update([
+            'Customer_Type_Name' => $request->input('Customer_Type_Name'),
+            'Customer_Type_Description' => $request->input('Customer_Type_Description'),
+        ]);
+
+        return response()->json($customertype);
+    }
+
+
+    public function destroy(CustomerType $customertype)
+    {
+        $customertype->delete();
+
+        return response()->json(null, 204);
+    }
     
 }

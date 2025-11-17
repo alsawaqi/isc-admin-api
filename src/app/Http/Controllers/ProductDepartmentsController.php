@@ -14,11 +14,38 @@ class ProductDepartmentsController extends Controller
 {
     //
 
-    public function index()
+    public function index(Request $request)
+    {
+        $search   = $request->query('search');
+        $sortBy   = $request->query('sortBy', 'id');      // default
+        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $perPage  = (int) $request->query('per_page', 10);
+
+        $query = ProductDepartments::query();
+
+        // search by name
+        if ($search) {
+            $query->where('Product_Department_Name', 'like', "%{$search}%");
+        }
+
+        // whitelist sortable columns
+        if (! in_array($sortBy, ['id', 'Product_Department_Name', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+
+        // return paginator (includes data + links + total + current_page)
+        return response()->json(
+            $query->paginate($perPage)
+        );
+    }
+
+
+    public function index_all()
     {
         return response()->json(
-            ProductDepartments::orderBy('id', 'DESC')
-                ->get()
+            ProductDepartments::orderBy('id', 'DESC')->get()
         );
     }
 
@@ -85,9 +112,9 @@ class ProductDepartmentsController extends Controller
 
     public function update(ProductDepartments $productdepartment, Request $request)
     {
-  
+
         //return response()->json($request->hasFile('image'), 200);
-       
+
         try {
             // You don't actually need to find again, because $productdepartment is already resolved.
 

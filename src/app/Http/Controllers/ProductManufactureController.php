@@ -10,9 +10,35 @@ class ProductManufactureController extends Controller
 {
     //
 
-    public function index()
+    public function index(Request $request)
     {
-       return response()->json(ProductManufacture::with('department')->orderBy('id', 'DESC')->get());
+        $search   = $request->query('search');
+        $sortBy   = $request->query('sortBy', 'id');      // default
+        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $perPage  = (int) $request->query('per_page', 10);
+
+
+        $query = ProductManufacture::query();
+        
+        $query->with('department');
+
+        //search by name
+        if ($search) {
+            $query->where('Products_Manufacture_Name', 'like', "%{$search}%");       
+         }
+
+        // whitelist sortable columns
+        if (!in_array($sortBy, ['id', 'Products_Manufacture_Name', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+
+        return response()->json(
+            $query->paginate($perPage)
+        );
+
+
     }
     public function store(Request $request)
     {
@@ -39,5 +65,12 @@ class ProductManufactureController extends Controller
         $productmanufacture->save();
 
         return response()->json(['message' => 'Product manufacture updated successfully'], 200);
+    }
+
+  public function destroy(ProductManufacture $productmanufacture)
+    {
+        $productmanufacture->delete();
+
+        return response()->json(['message' => 'Product manufacture deleted successfully'], 200);
     }
 }

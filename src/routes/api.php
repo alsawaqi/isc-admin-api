@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use App\Models\CustomerType;
 use App\Models\SecurityRole;
 use Illuminate\Http\Request;
@@ -11,6 +12,7 @@ use App\Http\Controllers\StateController;
 use App\Http\Controllers\RegionController;
 use App\Http\Controllers\CountryController;
 use App\Http\Controllers\ShipperController;
+use App\Notifications\NewOrderNotification;
 use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\CustomersController;
 use App\Http\Controllers\HeavyRateController;
@@ -34,14 +36,12 @@ use App\Http\Controllers\ShipperDestinationController;
 use App\Http\Controllers\SupportTicketAdminController;
 use App\Http\Controllers\ShipperShippingRateController;
 use App\Http\Controllers\ProductSubDepartmentController;
+use App\Http\Controllers\NotificationBroadcastController;
+use App\Http\Controllers\NotificationDeviceController;
 use App\Http\Controllers\ProductSubSubDepartmentController;
 use App\Http\Controllers\ProductSpecificationProductController;
 use App\Http\Controllers\ProductSpecificationDescriptionController;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
-
-
-
-
 
 Route::group(['middleware' => 'auth:sanctum'], function () {
 
@@ -66,6 +66,14 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
 
 
+     Route::controller(NotificationDeviceController::class)->group(function () {
+
+           Route::post('/notification-devices','storeOrUpdate');
+           Route::post('/notification-devices/disable', 'disableCurrentDevice');
+     });
+
+
+
     Route::controller(SupportTicketAdminController::class)->group(function () {
         Route::get('/admin/support-tickets', 'index');
         Route::get('/admin/support-tickets/{id}', 'show');
@@ -77,6 +85,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
     Route::controller(ProductDepartmentsController::class)->group(function () {
         Route::get('/productdepartment', 'index');
+          Route::get('/productdepartment/all', 'index_all');
         Route::post('/productdepartment', 'store');
         Route::post('/productdepartment/{productdepartment}', 'update');
         Route::get('/sub-departments/{departmentId}', 'getSubDepartments');
@@ -91,6 +100,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/productbrands', 'index');
         Route::post('/productbrands', 'store');
         Route::post('/productbrands/{productbrand}', 'update');
+        Route::delete('/productbrands/{productbrand}', 'destroy');
     });
 
 
@@ -127,6 +137,8 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
         Route::get('/customer-types', 'index');
         Route::post('/customer-types', 'store');
+        Route::put('/customer-types/{customertype}', 'update');
+        Route::delete('/customer-types/{customertype}', 'destroy');
     });
 
     Route::prefix('v1/shipping')->group(function () {
@@ -206,6 +218,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/productmanufacture', 'index');
         Route::post('/productmanufacture', 'store');
         Route::post('/productmanufacture/{productmanufacture}', 'update');
+        Route::delete('/productmanufacture/{productmanufacture}', 'destroy');
     });
 
 
@@ -220,6 +233,8 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
     Route::controller(ProductSubDepartmentController::class)->group(function () {
         Route::get('/productsubdepartment', 'index');
+      
+        
         Route::get('/product-departments-with-sub', 'getWithSubDepartments');
         Route::post('/productsubdepartment', 'store');
         Route::delete('/productsubdepartment/{productsubdepartment}', 'destroy');

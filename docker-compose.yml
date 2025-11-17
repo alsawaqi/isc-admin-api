@@ -32,6 +32,25 @@ services:
     depends_on:
       - laravel-app
 
+
+  # reverb:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/dev/php/php.dockerfile
+  #   working_dir: /var/www/html
+  #   command: php artisan reverb:start --host=0.0.0.0 --port=8080
+  #   volumes:
+  #     - /home/abdallah644/projects/my-projects/isc-admin-api/src:/var/www/html
+  #   env_file:
+  #     - ./src/.env    # 👈 give it the same env
+  #   depends_on:
+  #     - laravel-app
+  #   networks:
+  #     - proxy_network
+  #   ports:
+  #     - "8080:8080"
+ 
+
   composer:
     image: composer:latest
     container_name: composer

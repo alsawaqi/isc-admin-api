@@ -13,9 +13,8 @@ RUN apt-get update && apt-get install -y \
     lsb-release \
     libxml2-dev \
     libssl-dev \
-    zip \
-    unzip \
-    git \
+    zip unzip git \
+    build-essential autoconf \
     && apt-get upgrade -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -33,19 +32,31 @@ RUN apt-get update && ACCEPT_EULA=Y apt-get install -y \
     msodbcsql18 \
     mssql-tools18
 
-# Install SQLSRV PHP extensions
+# ✅ Install SQLSRV PHP extensions (after build tools)
 RUN pecl install pdo_sqlsrv sqlsrv \
     && docker-php-ext-enable pdo_sqlsrv sqlsrv
 
-# Install default PHP extensions
+# ✅ Install default PHP extensions
 RUN docker-php-ext-install pdo opcache
 
-# Add at the bottom
+# ✅ ADD THIS: install pcntl so Reverb can catch signals
+RUN docker-php-ext-install pcntl
+
+# Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-RUN chown -R www-data:www-data /var/www/html
- 
+# Set working directory
 WORKDIR /var/www/html
 
-CMD ["php-fpm"]
+# ✅ Set permissions for Laravel writable directories
+RUN mkdir -p storage/logs bootstrap/cache \
+    && touch storage/logs/laravel.log \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
 
+COPY docker/prod/php/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+CMD ["php-fpm"]

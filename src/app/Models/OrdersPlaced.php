@@ -13,7 +13,7 @@ class OrdersPlaced extends Model
     public function customerContact()
     {
         return $this->belongsTo(CustomerContact::class, 'Customers_Contacts_Id');
-    }    
+    }
 
 
     public function shipper()
@@ -23,7 +23,7 @@ class OrdersPlaced extends Model
 
     public function orderlist()
     {
-         return $this->hasMany(OrdersPlacedDetails::class, 'Orders_Placed_Id');
+        return $this->hasMany(OrdersPlacedDetails::class, 'Orders_Placed_Id');
     }
 
     public function transaction()
@@ -33,15 +33,13 @@ class OrdersPlaced extends Model
 
 
     // app/Models/OrdersPlaced.php
-public function packagingDetails()
-{
-    return $this->hasMany(OrderPackageDetails::class, 'Orders_Placed_Id');
-}
+    public function packagingDetails()
+    {
+        return $this->hasMany(OrderPackageDetails::class, 'Orders_Placed_Id');
+    }
 
-public function processLogs()
-{
-    return $this->hasMany(OrderProcessLog::class, 'Orders_Placed_Id');
-}
-
-
+    public function processLogs()
+    {
+        return $this->hasMany(OrderProcessLog::class, 'Orders_Placed_Id');
+    }
 }

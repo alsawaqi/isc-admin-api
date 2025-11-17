@@ -20,10 +20,38 @@ class OrdersPlacedController extends Controller
     //
 
 
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(OrdersPlaced::where('Status', 'pending')->with(['customerContact','shipper'])->orderBy('id','desc')->get());
-    }
+        $search   = $request->query('search');
+        $sortBy   = $request->query('sortBy', 'id');      // default
+        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $perPage  = (int) $request->query('per_page', 10);
+
+        $query = OrdersPlaced::query();
+
+
+        $query->with(['customerContact','shipper']);
+
+         // search by name
+        if ($search) {
+            $query->where('Transaction_Number', $search);
+        }
+
+        // whitelist sortable columns
+        if (! in_array($sortBy, ['id', 'Transaction_Number', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+
+        $query->where('Status', 'pending');
+
+        // return paginator (includes data + links + total + current_page)
+        return response()->json(
+            $query->paginate($perPage)
+        );
+
+     }
 
 
     public function packing_index(){

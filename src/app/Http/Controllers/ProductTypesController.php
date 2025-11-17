@@ -10,21 +10,41 @@ class ProductTypesController extends Controller
 {
     //
 
-    public function index()
+    public function index(Request $request)
     {
-        $productTypes = ProductTypes::orderBy('id', 'DESC')->get();
+        $search   = $request->query('search');
+        $sortBy   = $request->query('sortBy', 'id');      // default
+        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $perPage  = (int) $request->query('per_page', 10);
 
-        return response()->json(['data' => $productTypes], 200);
+        $query = ProductTypes::query();
+
+        // search by name
+        if ($search) {
+            $query->where('Product_Types_Name', 'like', "%{$search}%");
+        }
+
+        // whitelist sortable columns
+        if (! in_array($sortBy, ['id', 'Product_Types_Name', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+
+        // return paginator (includes data + links + total + current_page)
+        return response()->json(
+            $query->paginate($perPage)
+        );
     }
 
     public function store(Request $request)
     {
 
-       $pt_code = CodeGenerator::createCode('PRODTYPE', 'Products_Types_Master_T', 'Product_Types_Code');
-        
-        
+        $pt_code = CodeGenerator::createCode('PRODTYPE', 'Products_Types_Master_T', 'Product_Types_Code');
+
+
         ProductTypes::create([
-           'Product_Types_Code' => $pt_code,
+            'Product_Types_Code' => $pt_code,
             'Product_Types_Name' => $request->name,
             'Created_By' => $request->user()->id,
             'Created_Date' => now(),
@@ -37,7 +57,7 @@ class ProductTypesController extends Controller
     public function update(ProductTypes $producttype, Request $request)
     {
         $producttype->Product_Types_Name = $request->name;
-       
+
         $producttype->save();
 
         return response()->json(['message' => 'Product type updated successfully', 'data' => ''], 200);
