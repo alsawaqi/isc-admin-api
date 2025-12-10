@@ -35,6 +35,13 @@ class ProductBrandsController extends Controller
         );
     }
 
+    public function index_all()
+    {
+        return response()->json(
+            ProductBrands::orderBy('id', 'DESC')->get()
+        );
+    }
+
     public function store(Request $request)
     {
 
@@ -56,7 +63,7 @@ class ProductBrandsController extends Controller
         ProductBrands::create([
             'Product_Brand_Code' => $productBrandCode,
             'Products_Brands_Name' => $request->name,
-            'Products_Brands_Name_Ar' => $request->name,
+            'Products_Brands_Name_Ar' => $request->name_ar,
             'Products_Brands_Description' => $request->name,
             'Created_By' => $request->user()->id,
             'Created_Date' => now(),
@@ -72,6 +79,7 @@ class ProductBrandsController extends Controller
     public function update(Request $request, ProductBrands $productbrand)
     {
         $productbrand->Products_Brands_Name = $request->name;
+        $productbrand->Products_Brands_Name_Ar = $request->name_ar;
 
         if ($request->hasFile('image')) {
             // delete old file if exists...

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
- class SupportTicketController extends Controller
+class SupportTicketController extends Controller
 {
     // Map DB -> API shape
     private function toApi(SupportTicket $t): array
@@ -104,7 +104,7 @@ use Illuminate\Support\Str;
             SupportTicketMessage::create([
                 'Ticket_Id'   => $ticket->id,
                 'Sender_Type' => 'user',
-                'Message_Body'=> $request->input('description'),
+                'Message_Body' => $request->input('description'),
             ]);
 
             return response()->json([
@@ -153,7 +153,7 @@ use Illuminate\Support\Str;
         $msg = SupportTicketMessage::create([
             'Ticket_Id'   => $ticket->id,
             'Sender_Type' => 'user',
-            'Message_Body'=> $request->input('body'),
+            'Message_Body' => $request->input('body'),
         ]);
 
         // Optional: bump status

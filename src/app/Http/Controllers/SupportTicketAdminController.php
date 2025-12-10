@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Auth;
 
 class SupportTicketAdminController extends Controller
 {
-     /**
+    /**
      * GET /admin/support-tickets
      * Filters: status, type, q (search Subject/Reference), date range, customer_id, user_id
      * ?page=1&per_page=20&sort=-created_at
@@ -20,15 +20,15 @@ class SupportTicketAdminController extends Controller
     public function index(Request $request): JsonResponse
     {
         $request->validate([
-            'status'      => ['nullable', Rule::in(['open','pending','closed'])],
-            'type'        => ['nullable', Rule::in(['support','feedback','return'])],
-            'q'           => ['nullable','string','max:200'],
-            'customer_id' => ['nullable','integer'],
-            'user_id'     => ['nullable','integer'],
-            'from'        => ['nullable','date'],
-            'to'          => ['nullable','date'],
-            'per_page'    => ['nullable','integer','min:1','max:100'],
-            'sort'        => ['nullable','string'], // e.g. "-created_at", "subject"
+            'status'      => ['nullable', Rule::in(['open', 'pending', 'closed'])],
+            'type'        => ['nullable', Rule::in(['support', 'feedback', 'return'])],
+            'q'           => ['nullable', 'string', 'max:200'],
+            'customer_id' => ['nullable', 'integer'],
+            'user_id'     => ['nullable', 'integer'],
+            'from'        => ['nullable', 'date'],
+            'to'          => ['nullable', 'date'],
+            'per_page'    => ['nullable', 'integer', 'min:1', 'max:100'],
+            'sort'        => ['nullable', 'string'], // e.g. "-created_at", "subject"
         ]);
 
         $perPage = (int)($request->input('per_page', 20));
@@ -39,10 +39,10 @@ class SupportTicketAdminController extends Controller
             ->with([
                 // Attach lightweight user/customer names (if you maintain those tables)
                 // Assuming Secx_User_Master_T has 'User_Name' and Customers_Master_T has 'Customer_Name'
-                 'messages' => fn($m) => $m->latest()->limit(1), // for last message preview in list
-         
-                 'customer:id,Customer_Full_Name,Telephone',          
-                
+                'messages' => fn($m) => $m->latest()->limit(1), // for last message preview in list
+
+                'customer:id,Customer_Full_Name,Telephone',
+
             ]);
 
         if ($status = $request->input('status')) {
@@ -60,7 +60,7 @@ class SupportTicketAdminController extends Controller
         if ($term = trim((string)$request->input('q'))) {
             $q->where(function ($w) use ($term) {
                 $w->where('Subject', 'like', "%{$term}%")
-                  ->orWhere('Ticket_Reference', 'like', "%{$term}%");
+                    ->orWhere('Ticket_Reference', 'like', "%{$term}%");
             });
         }
         if ($from = $request->input('from')) {
@@ -100,11 +100,11 @@ class SupportTicketAdminController extends Controller
                 'messages_count'   => $t->messages_count,
                 'last_message_at'  => $last?->created_at,
                 'last_message_snippet' => $last?->Message_Body ? mb_strimwidth($last->Message_Body, 0, 120, '…') : null,
-               'customer'              => $t->customer ? [
-                                        'id'         => $t->customer->id,
-                                        'full_name'  => $t->customer->Customer_Full_Name,
-                                        'telephone'  => $t->customer->Telephone,
-                                     ] : null,
+                'customer'              => $t->customer ? [
+                    'id'         => $t->customer->id,
+                    'full_name'  => $t->customer->Customer_Full_Name,
+                    'telephone'  => $t->customer->Telephone,
+                ] : null,
                 'created_at'       => $t->created_at,
                 'updated_at'       => $t->updated_at,
             ];
@@ -135,8 +135,8 @@ class SupportTicketAdminController extends Controller
         $user = null;
         if ($ticket->User_Id) {
             $user = DB::table('Secx_User_Master_T')->where('User_Id', $ticket->User_Id)
-                        ->select('User_Id as id', 'User_Name as name', 'email as email')
-                        ->first();
+                ->select('User_Id as id', 'User_Name as name', 'email as email')
+                ->first();
         }
         $customer = null;
         if ($ticket->Customer_Id) {
@@ -180,9 +180,9 @@ class SupportTicketAdminController extends Controller
     public function reply(Request $request, int $id): JsonResponse
     {
         $request->validate([
-            'message_body' => ['required','string'],
-            'status'       => ['nullable', Rule::in(['open','pending','closed'])],
-            'close'        => ['nullable','boolean'],
+            'message_body' => ['required', 'string'],
+            'status'       => ['nullable', Rule::in(['open', 'pending', 'closed'])],
+            'close'        => ['nullable', 'boolean'],
         ]);
 
         $ticket = SupportTicket::findOrFail($id);
@@ -191,7 +191,7 @@ class SupportTicketAdminController extends Controller
             SupportTicketMessage::create([
                 'Ticket_Id'   => $ticket->id,
                 'Sender_Type' => 'support',
-                'Message_Body'=> $request->string('message_body'),
+                'Message_Body' => $request->string('message_body'),
                 'Admin_Id'    => Auth::id(), // assuming admin is authenticated
             ]);
 
@@ -220,7 +220,7 @@ class SupportTicketAdminController extends Controller
     public function updateStatus(Request $request, int $id): JsonResponse
     {
         $request->validate([
-            'status' => ['required', Rule::in(['open','pending','closed'])],
+            'status' => ['required', Rule::in(['open', 'pending', 'closed'])],
         ]);
 
         $ticket = SupportTicket::findOrFail($id);

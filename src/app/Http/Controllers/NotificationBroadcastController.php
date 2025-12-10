@@ -9,7 +9,7 @@ class NotificationBroadcastController extends Controller
 {
     //
 
-     public function broadcast(Request $request)
+    public function broadcast(Request $request)
     {
         $validated = $request->validate([
             'id' => 'required',

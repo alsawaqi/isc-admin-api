@@ -12,7 +12,9 @@ class Shipper extends Model
         'Shippers_Code','Shippers_Name','Shippers_Address','Shippers_Office_No',
         'Shippers_GSM_No','Shippers_Email_Address','Shippers_Official_Website_Address',
         'Shippers_GPS_Location','Shippers_Scope','Shippers_Type','Shippers_Rate_Mode',
-        'Shippers_Is_Active','Shippers_Meta'
+        'Shippers_Is_Active','Shippers_Meta','Shippers_Image_Path',
+        'Shippers_Size','Shippers_Extension','Shippers_Image_Type',
+        'Shippers_COD'
     ];
 
     protected $casts = [
@@ -67,5 +69,16 @@ class Shipper extends Model
     public function boxRates()
     {
         return $this->hasMany(ShipperBoxRate::class, 'Shippers_Id', 'id');
+    }
+
+      /** ✅ Aliases used in show() */
+    public function vehicles()
+    {
+        return $this->heavyVehicles();
+    }
+
+    public function standardBoxes()
+    {
+        return $this->boxSizes();
     }
 }

@@ -13,14 +13,14 @@ class HeavyVehicleController extends Controller
     // List vehicles for a shipper
     public function index(Request $request, Shipper $shipper)
     {
-        $q = $shipper->heavyVehicles()->select('id','Shippers_Id','Shippers_Vehicle_Name','Shippers_Vehicle_Capacity_Ton','created_at');
+        $q = $shipper->heavyVehicles()->select('id', 'Shippers_Id', 'Shippers_Vehicle_Name', 'Shippers_Vehicle_Capacity_Ton', 'created_at');
 
         if ($s = $request->string('search')->toString()) {
-            $q->where('Shippers_Vehicle_Name','like',"%$s%");
+            $q->where('Shippers_Vehicle_Name', 'like', "%$s%");
         }
 
         return $q->orderBy('Shippers_Vehicle_Name')
-                 ->paginate($request->integer('per_page', 20));
+            ->paginate($request->integer('per_page', 20));
     }
 
     // Create vehicle for a shipper

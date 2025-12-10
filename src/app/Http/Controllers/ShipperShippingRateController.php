@@ -10,13 +10,19 @@ use Illuminate\Http\Request;
 
 class ShipperShippingRateController extends Controller
 {
-   public function index(Request $request, ShipperDestination $destination)
+    public function index(Request $request, ShipperDestination $destination)
     {
         return ShipperShippingRate::where('Shippers_Destination_Id', $destination->id)
             ->select(
-                'id','Shippers_Id','Shippers_Destination_Id',
-                'Shippers_Destination_Country_Id','Shippers_Destination_Region_Id','Shippers_Destination_District_Id',
-                'Shippers_Destination_Rate_Volume','Shippers_Destination_Rate_Weight','Shippers_Destination_Rate_Applicable',
+                'id',
+                'Shippers_Id',
+                'Shippers_Destination_Id',
+                'Shippers_Destination_Country_Id',
+                'Shippers_Destination_Region_Id',
+                'Shippers_Destination_District_Id',
+                'Shippers_Destination_Rate_Volume',
+                'Shippers_Destination_Rate_Weight',
+                'Shippers_Destination_Rate_Applicable',
                 'created_at'
             )
             ->orderByDesc('id')

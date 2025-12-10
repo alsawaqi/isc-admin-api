@@ -18,11 +18,35 @@ class ProductMasterController extends Controller
     //
 
 
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(
-            ProductMaster::orderBy('id', 'DESC')->get()
-        );
+     
+
+        $search   = $request->query('search');
+        $sortBy   = $request->query('sortBy', 'id');      // default
+        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $perPage  = (int) $request->query('per_page', 10);
+
+        $query = ProductMaster::query();
+
+        //search by name
+        if ($search) {
+            $query->where('Product_Name', 'like', "%{$search}%");
+        }
+
+        // whitelist sortable columns
+        if (!in_array($sortBy, ['id', 'Product_Name', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        if (!in_array($sortDir, ['asc', 'desc'])) {
+            $sortDir = 'desc';
+        }
+
+        $products = $query->orderBy($sortBy, $sortDir)->paginate($perPage);
+
+        return response()->json($products);
+    
     }
 
 

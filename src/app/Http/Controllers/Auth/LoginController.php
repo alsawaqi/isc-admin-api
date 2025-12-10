@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\Hash;
 
 class LoginController extends Controller
 {
-   public function store(Request $request)
-{
+    public function store(Request $request)
+    {
         // Validate input
         $request->validate([
             'Email' => 'required|email',
@@ -27,7 +27,7 @@ class LoginController extends Controller
 
         // Create API token (Sanctum or Passport)
 
-         Auth::login($user);
+        Auth::login($user);
 
         $token = $user->createToken('api-token')->plainTextToken;
 
@@ -37,18 +37,17 @@ class LoginController extends Controller
         ]);
     }
 
-   public function logout(Request $request)
-{
-    $user = $request->user();
+    public function logout(Request $request)
+    {
+        $user = $request->user();
 
-    if ($user && $user->currentAccessToken()) {
-        // Only delete if it's a stored token
-        if (! $user->currentAccessToken() instanceof \Laravel\Sanctum\TransientToken) {
-            $user->currentAccessToken()->delete();
+        if ($user && $user->currentAccessToken()) {
+            // Only delete if it's a stored token
+            if (! $user->currentAccessToken() instanceof \Laravel\Sanctum\TransientToken) {
+                $user->currentAccessToken()->delete();
+            }
         }
+
+        return response()->json(['message' => 'Logged out']);
     }
-
-    return response()->json(['message' => 'Logged out']);
-}
-
 }

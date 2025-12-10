@@ -17,16 +17,24 @@ class HeavyRateController extends Controller
         $q = ShipperHeavyRate::query()
             ->where('Shippers_Destination_Id', $destination->id)
             ->with(['vehicle:id,Shippers_Vehicle_Name,Shippers_Id'])
-            ->select('id','Shippers_Id','Shippers_Destination_Id','Shippers_Vehicle_Id',
-                     'Shippers_Flat_Rate','Shippers_Hourly_Rate','Shippers_Min_Hours',
-                     'Shippers_Currency','created_at');
+            ->select(
+                'id',
+                'Shippers_Id',
+                'Shippers_Destination_Id',
+                'Shippers_Vehicle_Id',
+                'Shippers_Flat_Rate',
+                'Shippers_Hourly_Rate',
+                'Shippers_Min_Hours',
+                'Shippers_Currency',
+                'created_at'
+            );
 
         if ($vid = $request->integer('vehicle_id')) {
             $q->where('Shippers_Vehicle_Id', $vid);
         }
 
         return $q->orderBy('Shippers_Vehicle_Id')
-                 ->paginate($request->integer('per_page', 20));
+            ->paginate($request->integer('per_page', 20));
     }
 
     // Create heavy rate for a destination

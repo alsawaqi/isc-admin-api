@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Customers;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Models\OrdersPlaced;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use App\Models\OrderProcessLog;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use App\Models\OrderPackageDetails;
 use App\Models\OrdersPlacedDetails;
@@ -14,6 +17,9 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\SalesTransactionHeader;
 use App\Models\SalesTransactionDetails;
 use Illuminate\Support\Facades\Storage;
+use App\Models\OrdersPlacedDetailsCancelled;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\JsonResponse;
 
 class OrdersPlacedController extends Controller
 {
@@ -30,11 +36,17 @@ class OrdersPlacedController extends Controller
         $query = OrdersPlaced::query();
 
 
-        $query->with(['customerContact','shipper']);
+        $query->with(['customerContact', 'shipper']);
 
-         // search by name
-        if ($search) {
-            $query->where('Transaction_Number', $search);
+        // search by name
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('Transaction_Number', $search)
+                    ->orWhereHas('customerContact', function ($q2) use ($search) {
+                        $q2->where('Contact_Person_Name', 'like', "%{$search}%")
+                            ->orWhere('Telephone', $search);
+                    });
+            });
         }
 
         // whitelist sortable columns
@@ -50,199 +62,431 @@ class OrdersPlacedController extends Controller
         return response()->json(
             $query->paginate($perPage)
         );
-
-     }
-
-
-    public function packing_index(){
-
-        return response()->json(OrdersPlaced::where('Status', 'packed')->with(['customerContact','shipper'])->orderBy('id','desc')->get());
     }
 
 
-    public function dispatch_index(){
+    public function index_customer(Request $request)
+    {
+        $customerId = $request->customers_id;
 
-        return response()->json(OrdersPlaced::where('Status', 'processing')->with(['customerContact','shipper'])->orderBy('id','desc')->get());
+        $customer = Customers::find($customerId);
+
+        $sortBy     = $request->query('sortBy', 'id');      // default
+        $sortDir    = $request->query('sortDir', 'desc');   // default
+        $perPage    = (int) $request->query('per_page', 10);
+
+        $query = OrdersPlaced::query();
+
+        $query->with(['customerContact', 'shipper']);
+
+        if (!empty($customerId)) {
+            $query->where('Customers_Id', $customerId);
+        }
+
+        // whitelist sortable columns
+        if (! in_array($sortBy, ['id', 'Transaction_Number', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+
+
+        return response()->json([
+            'data' => $query->paginate($perPage),
+            'customer' => $customer
+        ]);
+    }
+
+    public function packing_index(Request $request)
+    {
+        $search   = $request->query('search');
+        $sortBy   = $request->query('sortBy', 'id');      // default
+        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $perPage  = (int) $request->query('per_page', 10);
+
+        $query = OrdersPlaced::query();
+
+
+        $query->with(['customerContact', 'shipper']);
+
+        // search by name
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('Transaction_Number', $search)
+                    ->orWhereHas('customerContact', function ($q2) use ($search) {
+                        $q2->where('Contact_Person_Name', 'like', "%{$search}%")
+                            ->orWhere('Telephone', $search);
+                    });
+            });
+        }
+
+        // whitelist sortable columns
+        if (! in_array($sortBy, ['id', 'Transaction_Number', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+
+        $query->where('Status', 'packed');
+
+        // return paginator (includes data + links + total + current_page)
+        return response()->json(
+            $query->paginate($perPage)
+        );
     }
 
 
-     public function shipment_index(){
+    public function dispatch_index(Request $request)
+    {
+        $search   = $request->query('search');
+        $sortBy   = $request->query('sortBy', 'id');      // default
+        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $perPage  = (int) $request->query('per_page', 10);
 
-        return response()->json(OrdersPlaced::where('Status', 'shipped')->with(['customerContact','shipper'])->orderBy('id','desc')->get());
+        $query = OrdersPlaced::query();
+
+
+        $query->with(['customerContact', 'shipper']);
+
+        // search by name
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('Transaction_Number', $search)
+                    ->orWhereHas('customerContact', function ($q2) use ($search) {
+                        $q2->where('Contact_Person_Name', 'like', "%{$search}%")
+                            ->orWhere('Telephone', $search);
+                    });
+            });
+        }
+
+        // whitelist sortable columns
+        if (! in_array($sortBy, ['id', 'Transaction_Number', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+
+        $query->where('Status', 'processing');
+
+        // return paginator (includes data + links + total + current_page)
+        return response()->json(
+            $query->paginate($perPage)
+        );
     }
 
 
-    public function delivered_index(){
-        return response()->json(OrdersPlaced::with(['customerContact','shipper'])->orderBy('id','desc')->get());
+    public function shipment_index(Request $request)
+    {
+        $search   = $request->query('search');
+        $sortBy   = $request->query('sortBy', 'id');      // default
+        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $perPage  = (int) $request->query('per_page', 10);
+
+        $query = OrdersPlaced::query();
+
+
+        $query->with(['customerContact', 'shipper']);
+
+        // search by name
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('Transaction_Number', $search)
+                    ->orWhereHas('customerContact', function ($q2) use ($search) {
+                        $q2->where('Contact_Person_Name', 'like', "%{$search}%")
+                            ->orWhere('Telephone', $search);
+                    });
+            });
+        }
+
+        // whitelist sortable columns
+        if (! in_array($sortBy, ['id', 'Transaction_Number', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+
+        $query->where('Status', 'shipped');
+
+        // return paginator (includes data + links + total + current_page)
+        return response()->json(
+            $query->paginate($perPage)
+        );
+    }
+
+
+    public function delivered_index(Request $request)
+    {
+        $search   = $request->query('search');
+        $sortBy   = $request->query('sortBy', 'id');
+        $status   = $request->query('status');    // default
+        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $perPage  = (int) $request->query('per_page', 10);
+
+        $query = OrdersPlaced::query();
+
+
+        $query->with(['customerContact', 'shipper']);
+
+        // search by name
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('Transaction_Number', $search)
+                    ->orWhereHas('customerContact', function ($q2) use ($search) {
+                        $q2->where('Contact_Person_Name', 'like', "%{$search}%")
+                            ->orWhere('Telephone', $search);
+                    });
+            });
+        }
+
+        // whitelist sortable columns
+        if (! in_array($sortBy, ['id', 'Transaction_Number', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+
+
+        if (!empty($status)) {
+            $query->where('Status', $status);
+        }
+
+
+
+        // return paginator (includes data + links + total + current_page)
+        return response()->json(
+            $query->paginate($perPage)
+        );
     }
 
 
 
     public function show($id)
     {
-            $order = OrdersPlaced::with([
-                                            'customerContact',
-                                            'shipper',
-                                            'orderlist',
-                                            'orderlist.product',
-                                            'transaction',
-                                            'transaction.details'
-                                        ])->findOrFail($id);
-            return response()->json($order);
+        $order = OrdersPlaced::with([
+            'customerContact',
+            'shipper',
+            'orderlist',
+            'orderlist.product',
+            'transaction',
+            'transaction.details'
+        ])->findOrFail($id);
+        return response()->json($order);
     }
 
 
-   public function packing(Request $request, $id){
+    public function packing(Request $request, $id)
+    {
+        $order        = OrdersPlaced::findOrFail($id);
+        $orderDetails = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
+        $saleHeader   = SalesTransactionHeader::where('Orders_Placed_Id', $order->id)->firstOrFail();
+
+        return DB::transaction(function () use ($request, $order, $orderDetails, $saleHeader) {
+            try {
+                // optional validation (good to keep)
+                $request->validate([
+                    'signature' => ['required', 'file', 'image', 'max:5120'],
+                    'note'      => ['nullable', 'string', 'max:2000'],
+                ]);
+
+                // 1) Mark all sales details as "confirmed"
+                SalesTransactionDetails::where('Sales_Transaction_Header_Id', $saleHeader->id)
+                    ->update(['Payment_Status' => 'confirmed']);
+
+                // 2) Get signature file
+                if (! $request->hasFile('signature')) {
+                    throw new \RuntimeException('No signature file received.');
+                }
+
+                $file = $request->file('signature');
+
+                if (! $file || ! $file->isValid()) {
+                    throw new \RuntimeException('Invalid signature upload.');
+                }
+
+                // folder in bucket: signatures/orders/{orderId}
+                $dir  = "signatures/orders/{$order->id}";
+
+                // returns something like "signatures/orders/100007/abcd1234.png"
+                $path = Storage::disk('r2')->put($dir, $file, 'public');
+
+                $imagePath = $path;
+                $publicUrl = config('filesystems.disks.r2.url') . '/' . $path;
+                $imageMime = $file->getMimeType() ?? 'image/png';
+
+                // 3) Update order + details status → packed
+                $order->update(['Status' => 'packed']);
+
+                foreach ($orderDetails as $detail) {
+                    $detail->update(['Status' => 'packed']);
+                }
+
+                // 4) Log process
+                OrderProcessLog::create([
+                    'Orders_Placed_Id' => $order->id,
+                    'Step_Code'        => 'PACKING_CONFIRMED',
+                    'Status'           => 'Packed',
+                    'Is_External'      => false,
+
+                    'Actor_User_Id'    => Auth::id(),
+                    'Actor_Name'       => Auth::user()->User_Name ?? 'System',
+                    'Actor_Role'       => optional(Auth::user())->role ?? null,
+
+                    'Signed_At'        => now(),
+                    'Signature_Url'    => $publicUrl,   // or $imagePath if you prefer
+                    'Signature_Mime'   => $imageMime,
+                    'Notes'            => $request->input('note') ?: null,
+                ]);
+
+                return response()->json([
+                    'message'       => 'Packing confirmed.',
+                    'order_id'      => $order->id,
+                    'signature_url' => $publicUrl,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Error confirming packing', [
+                    'order_id'  => $order->id,
+                    'message'   => $e->getMessage(),
+                    'trace'     => $e->getTraceAsString(),
+                ]);
+
+                return response()->json([
+                    'message' => 'Error confirming packing',
+                    'error'   => $e->getMessage(),
+                ], 500);
+            }
+        });
+    }
 
 
-            $order = OrdersPlaced::findOrFail($id);
-
-            $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
-
-            $saleheader = SalesTransactionHeader::where('Orders_Placed_Id', $order->id)->first();
-
-             $salesdetails = SalesTransactionDetails::where('Sales_Transaction_Header_Id', $saleheader->id)->first();
 
 
-             DB::transaction(function () use ($request, $order, $orderplacedetail, $salesdetails) {
+    public function cancel(Request $request, $id): JsonResponse
+    {
+        $order = OrdersPlaced::findOrFail($id);
 
-                    $salesdetails->update(['Payment_Status' => 'confirmed']);
-                    // Expect a data URL from the client: "data:image/png;base64,AAAA..."
-                    $dataUrl = (string) $request->input('signature');
-                    if (!preg_match('/^data:image\/(png|jpeg|jpg);base64,/', $dataUrl, $m)) {
-                        return response()->json(['message' => 'Invalid signature data URL'], 422);
-                    }
+        // Normalize selected_lines
+        $selectedLineIds = collect($request->input('selected_lines', []))
+            ->filter()     // remove null/empty
+            ->unique()     // avoid duplicates
+            ->values();
 
-                    $ext = $m[1] === 'jpg' ? 'jpeg' : $m[1];
-                    $binary = base64_decode(substr($dataUrl, strpos($dataUrl, ',') + 1));
+        DB::transaction(function () use ($order, $selectedLineIds, $request) {
 
-                    if ($binary === false) {
-                        return response()->json(['message' => 'Could not decode signature'], 422);
-                    }
-
-                    $dir = "signatures/orders/{$order->id}";
-                    // ensure directory exists under the *public* disk root: storage/app/public
-                    Storage::disk('public')->makeDirectory($dir);
-
-                    $filename = 'signature_'.now()->format('Ymd_His').'_'.Str::random(6).'.'.$ext;
-                    $path = "$dir/$filename";
-
-                    Storage::disk('public')->put($path, $binary, 'public'); // visibility = public
-                    $publicUrl = Storage::url($path); // => /storage/signatures/orders/ID/filename.png
-
-                    // update order status + write process log
-                    $order->update(['Status' => 'packed']);
-
-                    foreach($orderplacedetail as $detail){
-
-                            $detail->update(['Status' => 'packed']);
-                    }
-
-                    OrderProcessLog::create([
-                        'Orders_Placed_Id' => $order->id,
-                        'Step_Code'        => 'PACKING_CONFIRMED',
-                        'Status'           => 'Packed',
-                        'Is_External'      => false,
-                        'Actor_User_Id'    => Auth::id(),
-                        'Actor_Name'       => 'Name',
-                        'Actor_Role'       => 'accounting', // or whatever applies
-                        'Is_External'      => 1,
-                        'Signed_At'        => now(),
-                        'Signature_Storage'=> 'test',        // storage path under public disk
-                        'Signature_Url'     => 'tttt',    // public URL
-                        'Signature_Mime'    => '$sigMime' ?: 'image/png',
-                        'Notes'            => $request->input('note'),
-                    ]);
-
-            
-
-                    return response()->json(['ok' => true, 'url' => $publicUrl]);
-                    });
-
+            // 1) Decide which details to cancel
+            if ($selectedLineIds->isEmpty()) {
+                // Cancel ALL currently active details for this order
+                $detailsToCancel = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)
+                    ->where('Status', '!=', 'cancelled')
+                    ->get();
+            } else {
+                // Cancel ONLY selected lines that belong to this order and are not cancelled yet
+                $detailsToCancel = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)
+                    ->whereIn('id', $selectedLineIds)
+                    ->where('Status', '!=', 'cancelled')
+                    ->get();
             }
 
 
+            // 2) Get signature file
+            if (! $request->hasFile('signature')) {
+                throw new \RuntimeException('No signature file received.');
+            }
 
-            public function cancel(Request $request, $id){
+            $file = $request->file('signature');
 
+            if (! $file || ! $file->isValid()) {
+                throw new \RuntimeException('Invalid signature upload.');
+            }
 
-                    $order = OrdersPlaced::findOrFail($id);
+            // folder in bucket: signatures/orders/{orderId}
+            $dir  = "signatures/orders/{$order->id}";
 
-                    $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
+            // returns something like "signatures/orders/100007/abcd1234.png"
+            $path = Storage::disk('r2')->put($dir, $file, 'public');
 
-                    $saleheader = SalesTransactionHeader::where('Orders_Placed_Id', $order->id)->first();
+            $imagePath = $path;
+            $publicUrl = config('filesystems.disks.r2.url') . '/' . $path;
+            $imageMime = $file->getMimeType() ?? 'image/png';
 
-                    //$salesdetails = SalesTransactionDetails::where('Sales_Transaction_Header_Id', $saleheader->id)->first();
+            // 2) Apply cancellation + write to "cancelled" table + process log
+            foreach ($detailsToCancel as $detail) {
+                // update detail status
+                $detail->update(['Status' => 'cancelled']);
 
+                // create "cancelled detail" record
+                $cancelledDetail = OrdersPlacedDetailsCancelled::create([
+                    'Orders_Placed_Details_Id' => $detail->id,
+                    'Orders_Placed_Id'         => $order->id,
+                    'Cancelled_By_Users_Id'    => Auth::id(),
+                    'Cancellation_Reason'      => $request->input('note'),
+                ]);
 
-                    DB::transaction(function () use ($request, $order, $orderplacedetail, ) {
+                // process log linked to this cancelled detail
+                OrderProcessLog::create([
+                    'Orders_Placed_Id'                     => $order->id,
+                    'Orders_Placed_Details_Cancelled_Id'   => $cancelledDetail->id,
+                    'Step_Code'                            => 'CANCELLED',
+                    'Status'                               => 'Cancelled',
+                    'Is_External'                          => 0,
+                    'Actor_User_Id'                        => Auth::id(),
+                    'Actor_Name'                           => Auth::user()?->name ?? 'System',
+                    'Actor_Role'                           => 'accounting',
+                    'Signed_At'                            => now(),
 
-                    //   $salesdetails->update(['Payment_Status' => 'cancelled']);
-        
-                    // update order status + write process log
-                    $order->update(['Status' => 'cancelled']);
+                    'Signature_Url'    => $publicUrl,   // or $imagePath if you prefer
+                    'Signature_Mime'   => $imageMime,
+                    'Notes'                                => $request->input('note'),
+                ]);
+            }
 
-                    foreach($orderplacedetail as $detail){
+            // 3) After cancelling, check if ANY active details remain
+            $hasActiveLines = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)
+                ->where('Status', '!=', 'cancelled')
+                ->exists();
 
-                            $detail->update(['Status' => 'cancelled']);
-                    }
+            // If no active lines → cancel parent order too
+            if (! $hasActiveLines) {
+                $order->update(['Status' => 'cancelled']);
+            }
+        });
 
-                    OrderProcessLog::create([
-                        'Orders_Placed_Id' => $order->id,
-                        'Step_Code'        => 'CANCELLED',
-                        'Status'           => 'Cancelled',
-                        'Is_External'      => false,
-                        'Actor_User_Id'    => Auth::id(),
-                        'Actor_Name'       => 'Name',
-                        'Actor_Role'       => 'accounting', // or whatever applies
-                        'Is_External'      => 1,
-                        'Signed_At'        => now(),
-                        'Signature_Storage'=> 'test',        // storage path under public disk
-                        'Signature_Url'     => 'tttt',    // public URL
-                        'Signature_Mime'    => '$sigMime' ?: 'image/png',
-                        'Notes'            => $request->input('note'),
-                    ]);
-
-       
-
-                return response()->json(['ok' => true]);
-
-
-
-             });
-
+        return response()->json(['ok' => true]);
     }
-       
+
+
 
     public function dispatch(Request $request, $id)
     {
-        // keep it minimal: files optional, signature required
         $request->validate([
             'files'     => ['array'],           // files[DETAIL_ID][] (optional)
             'files.*'   => ['array'],
-            'files.*.*' => ['file','image','max:5120'],
-            'signature' => ['required'],        // file OR data URL
-            'note'      => ['nullable','string','max:2000'],
+            'files.*.*' => ['file', 'image', 'max:5120'],
+
+            // 🔹 signature as real uploaded image file
+            'signature' => ['required', 'file', 'image', 'max:5120'],
+            'note'      => ['nullable', 'string', 'max:2000'],
         ]);
 
         $order = OrdersPlaced::findOrFail($id);
         $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
 
         return DB::transaction(function () use ($request, $order, $orderplacedetail) {
-
-            // 1) Save any photos to Orders_Packaging_Details_T (simple loop, no extra rules)
+            // 1) Save any photos to Orders_Packaging_Details_T
             $evidence = [];
+
             foreach ((array) $request->file('files', []) as $detailId => $files) {
                 foreach ((array) $files as $file) {
-                    $dir  = "public/orders/packaging/{$order->id}/{$detailId}";
-                    $name = 'packed_'.now()->format('Ymd_His').'_'.Str::random(5).'.'.($file->getClientOriginalExtension() ?: 'jpg');
-                    $path = $file->storeAs($dir, $name);
+                    $dir  = "orders/packaging/{$order->id}/{$detailId}";
+                    $name = 'packed_' . now()->format('Ymd_His') . '_' . Str::random(5)
+                        . '.' . ($file->getClientOriginalExtension() ?: 'jpg');
+
+                    $path = $file->storeAs($dir, $name);   // returns relative path
 
                     $row = OrderPackageDetails::create([
-                        'Packaging_Code'           => 'PKG-'.'-'.Str::upper(Str::random(4)),
+                        'Packaging_Code'           => 'PKG-' . Str::upper(Str::random(4)),
                         'Orders_Placed_Id'         => $order->id,
                         'Orders_Placed_Details_Id' => (int) $detailId,
-                        'Packed_Image'             => Storage::url($path),
+                        'Packed_Image'             => $path,      // 👈 path only
                         'Packed_By'                => Auth::id(),
                     ]);
 
@@ -250,140 +494,197 @@ class OrdersPlacedController extends Controller
                 }
             }
 
-            // 2) Signature (file OR data URL → save to public disk)
-            [$sigPath, $sigUrl, $sigMime] = $this->saveSignature($order->id, $request->file('signature'), $request->input('signature'));
 
-          OrderProcessLog::create([
-                        'Orders_Placed_Id'  => $order->id,
-                        'Step_Code'         => 'DISPATCH_READY',
-                        'Status'            => 'confirmed',
-                        'Actor_User_Id'     => Auth::id(),
-                        'Actor_Name'        => Auth::user()->User_Name,
-                        'Actor_Role'        => optional(Auth::user())->role, // string or null
-                        'Is_External'       => false,
-                     
-                        'Notes'             => $request->input('note') ?: null,
-                        // e.g. "public/signatures/orders/..."
-                        'Signature_Url'     => $sigUrl,    // public URL
-                        // DO NOT set Signature_Blob at all (let it be NULL)
-                        'Signature_Mime'    => $sigMime ?: 'image/png',
-                        'Signed_At'         => now(),
-                    ]);
+            // 2) 🔹 Signature to R2 (simple style)
+            $sigFile = $request->file('signature');
 
+            if (! $sigFile || ! $sigFile->isValid()) {
+                throw new \RuntimeException('Invalid signature upload.');
+            }
 
-            // 3) Flip status → processing
+            // folder in bucket: signatures/orders/{orderId}
+            $dir  = "signatures/orders/{$order->id}";
+
+            // ex: "signatures/orders/100007/abc123.png"
+            $path = Storage::disk('r2')->put($dir, $sigFile, 'public');
+
+            $publicUrl = rtrim(config('filesystems.disks.r2.url'), '/') . '/' . ltrim($path, '/');
+            $mime      = $sigFile->getMimeType() ?? 'image/png';
+
+            // 3) Log in OrderProcessLog
+            OrderProcessLog::create([
+                'Orders_Placed_Id'  => $order->id,
+                'Step_Code'         => 'DISPATCH_READY',
+                'Status'            => 'dispatched',
+                'Actor_User_Id'     => Auth::id(),
+                'Actor_Name'        => Auth::user()->User_Name ?? 'System',
+                'Actor_Role'        => optional(Auth::user())->role,
+                'Is_External'       => false,
+
+                'Notes'             => $request->input('note') ?: null,
+                'Signature_Url'     => $publicUrl,    // 👈 this is what you wanted
+                'Signature_Mime'    => $mime,
+                'Signed_At'         => now(),
+            ]);
+
+            // 4) Flip status → processing
             $order->update(['Status' => 'processing']);
-
-             foreach($orderplacedetail as $detail){
-
-                    $detail->update(['Status' => 'processing']);
-              }
+            foreach ($orderplacedetail as $detail) {
+                $detail->update(['Status' => 'processing']);
+            }
 
             return response()->json([
                 'message'        => 'Dispatched (processing) recorded.',
                 'order_id'       => $order->id,
-                'signature_url'  => $sigUrl,
+                'signature_url'  => $publicUrl,
                 'evidence_count' => count($evidence),
             ]);
         });
     }
 
+
+
     /**
      * Minimal helper: accept either uploaded file or data URL string.
      */
-    protected function saveSignature(int $orderId, $file = null, ?string $dataUrl = null): array
+    protected function saveSignature(int $orderId, ?UploadedFile $file = null, ?string $dataUrl = null): array
     {
-        $dir = "public/signatures/orders/{$orderId}";
-        Storage::makeDirectory($dir);
+        // 🔧 choose the disk you actually use for signatures:
+        //   'public'  → /storage/...
+        //   'r2'      → Cloudflare R2 (if configured)
+        $disk = 'public'; // change to 'r2' if needed
 
-        if ($file) {
+        $dir = "signatures/orders/{$orderId}";
+        Storage::disk($disk)->makeDirectory($dir);
+
+        // 1) If a normal uploaded file is provided (e.g. phone camera file)
+        if ($file instanceof UploadedFile) {
             $ext  = $file->getClientOriginalExtension() ?: 'png';
-            $name = 'dispatch_'.now()->format('Ymd_His').'_'.Str::random(5).'.'.$ext;
-            $path = $file->storeAs($dir, $name);
-            return [$path, Storage::url($path), $file->getClientMimeType()];
+            $mime = $file->getClientMimeType() ?: 'image/' . $ext;
+
+            $filename = 'signature_' . now()->format('Ymd_His') . '_' . Str::random(6) . '.' . $ext;
+            $path     = "{$dir}/{$filename}";
+
+            Storage::disk($disk)->putFileAs($dir, $file, $filename, ['visibility' => 'public']);
+
+            $url = $disk === 'public' ? Storage::url($path) : Storage::disk($disk)->path($path);
+
+            return [$path, $url, $mime];
         }
 
-        // very small parser for data:image/*;base64,...
-        if ($dataUrl && preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/', $dataUrl, $m)) {
-            $mime = $m[1];
-            $bin  = base64_decode($m[2]);
-            $ext  = str_contains($mime, 'jpeg') ? 'jpg' : explode('/', $mime)[1] ?? 'png';
-            $name = 'dispatch_'.now()->format('Ymd_His').'_'.Str::random(5).'.'.$ext;
-            $path = "{$dir}/{$name}";
-            Storage::put($path, $bin);
-            return [$path, Storage::url($path), $mime];
+        // 2) Otherwise, expect a SignaturePad data URL string
+        if (!$dataUrl || !preg_match('/^data:image\/(png|jpeg|jpg);base64,/', $dataUrl, $m)) {
+            throw ValidationException::withMessages([
+                'signature' => 'Invalid signature data URL.',
+            ]);
         }
 
-        // If we reach here, signature was required but invalid
-        abort(422, 'Invalid signature.');
+        $ext  = $m[1] === 'jpg' ? 'jpeg' : $m[1];
+        $mime = 'image/' . $ext;
+
+        $binary = base64_decode(substr($dataUrl, strpos($dataUrl, ',') + 1));
+        if ($binary === false) {
+            throw ValidationException::withMessages([
+                'signature' => 'Could not decode signature image.',
+            ]);
+        }
+
+        $filename = 'signature_' . now()->format('Ymd_His') . '_' . Str::random(6) . '.' . $ext;
+        $path     = "{$dir}/{$filename}";
+
+        Storage::disk($disk)->put($path, $binary, 'public');
+
+        $url = $disk === 'public' ? Storage::url($path) : Storage::disk($disk)->path($path);
+
+        return [$path, $url, $mime];
     }
 
-      public function shipment(Request $request,$id){
+    // Inside OrdersPlacedController
+    public function shipment(Request $request, $id)
+    {
+        // Validate request
+        $request->validate([
+            'signature' => ['required', 'file', 'image', 'max:5120'],    // SignaturePad data URL
+            'note'      => ['nullable', 'string', 'max:2000'],
+        ]);
 
-                 $order = OrdersPlaced::findOrFail($id);
+        $order = OrdersPlaced::findOrFail($id);
+        $orderDetails = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
+        try {
 
-                $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
 
-     DB::transaction(function () use ($request, $order, $orderplacedetail) {
+            return DB::transaction(function () use ($request, $order, $orderDetails) {
 
-                   
 
-                // Expect data URL "data:image/png;base64,..."
-                $dataUrl = (string) $request->input('signature');
-                if (!preg_match('/^data:image\/(png|jpeg|jpg);base64,/', $dataUrl, $m)) {
-                    return response()->json(['message' => 'Invalid signature data URL'], 422);
+
+                // 2) Get signature file
+                if (! $request->hasFile('signature')) {
+                    throw new \RuntimeException('No signature file received.');
                 }
 
-                $ext    = $m[1] === 'jpg' ? 'jpeg' : $m[1];
-                $binary = base64_decode(substr($dataUrl, strpos($dataUrl, ',') + 1));
-                if ($binary === false) {
-                    return response()->json(['message' => 'Could not decode signature'], 422);
+                $file = $request->file('signature');
+
+                if (! $file || ! $file->isValid()) {
+                    throw new \RuntimeException('Invalid signature upload.');
                 }
 
-                $dir = "signatures/orders/{$order->id}";
-                Storage::disk('public')->makeDirectory($dir);
+                // folder in bucket: signatures/orders/{orderId}
+                $dir  = "signatures/orders/{$order->id}";
 
-                $filename = 'signature_'.now()->format('Ymd_His').'_'.Str::random(6).'.'.$ext;
-                $path = "$dir/$filename";
+                // returns something like "signatures/orders/100007/abcd1234.png"
+                $path = Storage::disk('r2')->put($dir, $file, 'public');
 
-                Storage::disk('public')->put($path, $binary, 'public');
-                $publicUrl = Storage::url($path); // /storage/...
+                $imagePath = $path;
+                $publicUrl = config('filesystems.disks.r2.url') . '/' . $path;
+                $imageMime = $file->getMimeType() ?? 'image/png';
 
-                // Update status
+
+
+
+                // 2) Update statuses → shipped
                 $order->update(['Status' => 'shipped']);
 
-                // Log process (no varbinary writes)
+                foreach ($orderDetails as $detail) {
+                    $detail->update(['Status' => 'shipped']);
+                }
+
+                // 3) Log shipment in Order_Process_Log_T
                 OrderProcessLog::create([
-                    'Orders_Placed_Id'  => $order->id,
-                    'Step_Code'         => 'PACKING_CONFIRMED',
-                    'Status'            => 'done',
-                    'Actor_User_Id'     => Auth::id(),
-                    'Actor_Name'        => optional(Auth::user())->User_Name,
-                    'Actor_Role'        => optional(Auth::user())->role, // adjust if different
-                    'Is_External'       => false,
-               
-                    'Signature_Url'     => $publicUrl,   // public URL
-                    'Signature_Mime'    => "image/{$ext}",
-                    'Signed_At'         => now(),
-                    'Notes'             => $request->input('note'),
+                    'Orders_Placed_Id' => $order->id,
+                    'Step_Code'        => 'SHIPMENT_CONFIRMED',
+                    'Status'           => 'shipped',
+                    'Is_External'      => false,
+
+                    'Actor_User_Id'    => Auth::id(),
+                    'Actor_Name'       => optional(Auth::user())->User_Name ?? 'System',
+                    'Actor_Role'       => optional(Auth::user())->role ?? null,
+
+                    'Signed_At'        => now(),
+
+                    // 👇 store ONLY the storage path in DB
+                    'Signature_Url'    => $publicUrl,   // e.g. "signatures/orders/123/file.png"
+
+                    'Signature_Mime'   => $imageMime,
+                    'Notes'            => $request->input('note')  ?: null,
                 ]);
-              
-                 foreach($orderplacedetail as $detail){
-                            $detail->update(['Status' => 'shipped']);
-                      }
+
+                return response()->json([
+                    'message'       => 'Shipment confirmed.',
+                    'order_id'      => $order->id,
 
 
-                 return response()->json(['ok' => true, 'url' => $publicUrl]);
-                });
+                ]);
+            });
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Error confirming shipment', 'error' => $e->getMessage()], 500);
+        }
+    }
 
 
 
-      }
 
-
- public function overview($id){
-
-
+    public function overview($id)
+    {
         $order = OrdersPlaced::with([
             'customerContact',
             'shipper',
@@ -421,7 +722,7 @@ class OrdersPlacedController extends Controller
                     'actor'      => [
                         'id'   => $l->Actor_User_Id,
                         'name' => $l->Actor_Name ?: optional($l->actor)->User_Name,
-                         
+
                     ],
                     'notes'      => $l->Notes,
                     'signature'  => [
@@ -436,14 +737,21 @@ class OrdersPlacedController extends Controller
 
         return response()->json([
             'order'             => $order->only([
-                'id','Order_Code','Transaction_Number','Status','created_at',
-                'Shipping_Weight_Kg','Shipping_Price','Tax','Total_Price'
+                'id',
+                'Order_Code',
+                'Transaction_Number',
+                'Status',
+                'created_at',
+                'Shipping_Weight_Kg',
+                'Shipping_Price',
+                'Tax',
+                'Total_Price'
             ]),
             'customer_contact'  => $order->customerContact,
             'shipper'           => $order->shipper,
             'details'           => $order->orderlist,          // with product
             'transaction'       => $order->transaction,        // with details
-            'packages_by_detail'=> $packagesByDetail,          // grouped
+            'packages_by_detail' => $packagesByDetail,          // grouped
             'logs'              => $logs,                      // timeline
         ]);
     }
@@ -451,24 +759,47 @@ class OrdersPlacedController extends Controller
     private function decodeEvidence($json)
     {
         if (!$json) return [];
-        try { return json_decode($json, true) ?: []; } catch (\Throwable $e) { return []; }
+        try {
+            return json_decode($json, true) ?: [];
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
 
     public function complete($id)
     {
-        
-            $order = OrdersPlaced::where('id', $id)
-                                    ->firstOrFail();
 
-           $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
-           DB::transaction(function () use ($order, $orderplacedetail) {
-                         foreach($orderplacedetail as $detail){
-    
-                        $detail->update(['Status' => 'delivered']);
-                }
-               $order->update(['Status' => 'delivered']);
-           });
-               
+        $order = OrdersPlaced::where('id', $id)
+            ->firstOrFail();
+
+        $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
+        DB::transaction(function () use ($order, $orderplacedetail) {
+            foreach ($orderplacedetail as $detail) {
+
+                $detail->update(['Status' => 'delivered']);
+            }
+            $order->update(['Status' => 'delivered']);
+        });
+    }
+
+
+    public function putOnHold($id)
+    {
+        $order = OrdersPlaced::where('id', $id)
+            ->firstOrFail();
+
+        $order->update(['Status' => 'on-hold']);
+    }
+
+
+    public function removeOnHold($id)
+    {
+
+
+        $order = OrdersPlaced::where('id', $id)
+            ->firstOrFail();
+
+        $order->update(['Status' => 'pending']);
     }
 }

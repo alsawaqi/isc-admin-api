@@ -37,6 +37,14 @@ class ProductTypesController extends Controller
         );
     }
 
+
+    public function index_all()
+    {
+        return response()->json(
+            ProductTypes::orderBy('id', 'DESC')->get()
+        );
+    }
+
     public function store(Request $request)
     {
 
@@ -46,6 +54,7 @@ class ProductTypesController extends Controller
         ProductTypes::create([
             'Product_Types_Code' => $pt_code,
             'Product_Types_Name' => $request->name,
+            'Product_Types_Name_Ar' => $request->name_ar,
             'Created_By' => $request->user()->id,
             'Created_Date' => now(),
         ]);
@@ -57,6 +66,7 @@ class ProductTypesController extends Controller
     public function update(ProductTypes $producttype, Request $request)
     {
         $producttype->Product_Types_Name = $request->name;
+        $producttype->Product_Types_Name_Ar = $request->name_ar;
 
         $producttype->save();
 

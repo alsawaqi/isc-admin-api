@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use Nette\Utils\Json;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use App\Models\ContactDepartments;
 
 class ContactDepartmentsController extends Controller
@@ -10,12 +12,46 @@ class ContactDepartmentsController extends Controller
     //
 
 
-    public function index()
+    public function index(Request $request) : JsonResponse
     {
-        $departments = ContactDepartments::orderBy('id','DESC')->get();
-        return response()->json($departments);
+          
+        $search   = $request->query('search');
+        $sortBy   = $request->query('sortBy', 'id');      // default
+        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $perPage  = (int) $request->query('per_page', 10);
+
+
+        $query = ContactDepartments::query();
+
+
+        if ($search) {
+            $query->where('Department_Name', 'like', "%{$search}%");
+        }
+
+
+
+         // whitelist sortable columns
+        if (! in_array($sortBy, ['id', 'Transaction_Number', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+
+        return response()->json(
+            $query->paginate($perPage)
+        );
+
+        
     }
 
+
+
+    public function index_all() : JsonResponse
+    {
+        return response()->json(
+            ContactDepartments::orderBy('id', 'DESC')->get()
+        );
+    }   
 
     public function store(Request $request)
     {

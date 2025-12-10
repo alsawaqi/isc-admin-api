@@ -40,6 +40,14 @@ class ProductManufactureController extends Controller
 
 
     }
+
+
+    public function index_all()
+    {
+        return response()->json(
+            ProductManufacture::orderBy('id', 'DESC')->get()
+        );
+    }
     public function store(Request $request)
     {
         $productManufactureCode = CodeGenerator::createCode('MFR', 'Products_Manufacture_Master_T', 'Product_Manufacture_Code');
@@ -47,7 +55,7 @@ class ProductManufactureController extends Controller
         ProductManufacture::create([
             'Product_Manufacture_Code' => $productManufactureCode,
             'Products_Manufacture_Name' => $request->name,
-            'Products_Manufacture_Name_Ar' => $request->name,
+            'Products_Manufacture_Name_Ar' => $request->name_ar,
             'Product_Department_Id' => $request->product_department_id,
            
         ]);
@@ -58,7 +66,7 @@ class ProductManufactureController extends Controller
     public function update(Request $request, ProductManufacture $productmanufacture)
     {
         $productmanufacture->Products_Manufacture_Name = $request->name;
-        $productmanufacture->Products_Manufacture_Name_Ar = $request->name;
+        $productmanufacture->Products_Manufacture_Name_Ar = $request->name_ar;
         if ($request->has('product_department_id')) {
             $productmanufacture->Product_Department_Id = $request->product_department_id;
         }

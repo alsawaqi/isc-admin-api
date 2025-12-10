@@ -5,6 +5,7 @@ use App\Models\CustomerType;
 use App\Models\SecurityRole;
 use Illuminate\Http\Request;
 use Laravel\Fortify\RoutePath;
+use Laravel\Nightwatch\Location;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CityController;
 use App\Http\Controllers\UserController;
@@ -16,8 +17,10 @@ use App\Notifications\NewOrderNotification;
 use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\CustomersController;
 use App\Http\Controllers\HeavyRateController;
+use App\Http\Controllers\LocationsController;
 use App\Http\Controllers\CustomerTypeController;
 use App\Http\Controllers\HeavyVehicleController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrdersPlacedController;
 use App\Http\Controllers\ProductTypesController;
 use App\Http\Controllers\AuthenticatedController;
@@ -30,6 +33,7 @@ use App\Http\Controllers\ProductsBarcodesController;
 use App\Http\Controllers\ShipperVolumeRateController;
 use App\Http\Controllers\ShipperWeightRateController;
 use App\Http\Controllers\ContactDepartmentsController;
+use App\Http\Controllers\NotificationDeviceController;
 use App\Http\Controllers\ProductDepartmentsController;
 use App\Http\Controllers\ProductManufactureController;
 use App\Http\Controllers\ShipperDestinationController;
@@ -37,13 +41,15 @@ use App\Http\Controllers\SupportTicketAdminController;
 use App\Http\Controllers\ShipperShippingRateController;
 use App\Http\Controllers\ProductSubDepartmentController;
 use App\Http\Controllers\NotificationBroadcastController;
-use App\Http\Controllers\NotificationDeviceController;
 use App\Http\Controllers\ProductSubSubDepartmentController;
 use App\Http\Controllers\ProductSpecificationProductController;
 use App\Http\Controllers\ProductSpecificationDescriptionController;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
 
 Route::group(['middleware' => 'auth:sanctum'], function () {
+
+
+
 
 
     Route::get('/user', function (Request $request) {
@@ -60,17 +66,21 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
 
     Route::controller(UserController::class)->group(function () {
+
         Route::post('/users', 'store');
         Route::get('/users-with-roles', 'getUsersWithRoles');
+        Route::post('/users/{id}/block',   'block');
+        Route::post('/users/{id}/unblock', 'unblock');
+        Route::post('/users/{user}/change-password', 'changePassword');
     });
 
 
 
-     Route::controller(NotificationDeviceController::class)->group(function () {
+    Route::controller(NotificationDeviceController::class)->group(function () {
 
-           Route::post('/notification-devices','storeOrUpdate');
-           Route::post('/notification-devices/disable', 'disableCurrentDevice');
-     });
+        Route::post('/notification-devices', 'storeOrUpdate');
+        Route::post('/notification-devices/disable', 'disableCurrentDevice');
+    });
 
 
 
@@ -85,7 +95,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
     Route::controller(ProductDepartmentsController::class)->group(function () {
         Route::get('/productdepartment', 'index');
-          Route::get('/productdepartment/all', 'index_all');
+        Route::get('/productdepartment/all', 'index_all');
         Route::post('/productdepartment', 'store');
         Route::post('/productdepartment/{productdepartment}', 'update');
         Route::get('/sub-departments/{departmentId}', 'getSubDepartments');
@@ -94,10 +104,16 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     });
 
 
+    Route::controller(NotificationController::class)->group(function () {
+        Route::get('/notifications', 'index');
+        Route::post('/notifications/mark-as-read', 'markAllRead');
+    });
+
 
     Route::controller(ProductBrandsController::class)->group(function () {
 
         Route::get('/productbrands', 'index');
+        Route::get('/productbrands/all', 'index_all');
         Route::post('/productbrands', 'store');
         Route::post('/productbrands/{productbrand}', 'update');
         Route::delete('/productbrands/{productbrand}', 'destroy');
@@ -130,6 +146,10 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::controller(CustomersController::class)->group(function () {
 
         Route::get('/customers', 'index');
+        Route::get('/customers/carts', 'index_carts');
+        Route::get('/customers/favorites', 'index_favorites');
+        Route::post('/customers/{id}/block', 'block');
+        Route::post('/customers/{id}/unblock', 'unblock');
     });
 
 
@@ -216,6 +236,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
     Route::controller(ProductManufactureController::class)->group(function () {
         Route::get('/productmanufacture', 'index');
+        Route::get('/productmanufacture/all', 'index_all');
         Route::post('/productmanufacture', 'store');
         Route::post('/productmanufacture/{productmanufacture}', 'update');
         Route::delete('/productmanufacture/{productmanufacture}', 'destroy');
@@ -225,22 +246,20 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
     Route::controller(ProductTypesController::class)->group(function () {
         Route::get('/producttype', 'index');
+        Route::get('/producttype/all', 'index_all');
         Route::post('/producttype', 'store');
         Route::put('/producttype/{producttype}', 'update');
-
     });
 
 
     Route::controller(ProductSubDepartmentController::class)->group(function () {
         Route::get('/productsubdepartment', 'index');
-      
-        
+
+
         Route::get('/product-departments-with-sub', 'getWithSubDepartments');
         Route::post('/productsubdepartment', 'store');
         Route::delete('/productsubdepartment/{productsubdepartment}', 'destroy');
         Route::post('/productsubdepartment/{productsubdepartment}', 'update');
-
-        
     });
 
 
@@ -261,14 +280,13 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::post('/sub-sub-departments', 'store');
         Route::post('/sub-sub-departments/{subsub}', 'update');
         Route::delete('/sub-sub-departments/{productsubsub}', 'destroy');
-
-         
     });
 
 
 
     Route::controller(RolePermissionController::class)->group(function () {
         Route::get('/roles',  'index');
+        Route::get('/roles/all',  'index_all');
         Route::post('/roles',  'storeRole');
         Route::get('/roles/{id}/permissions',  'getRolePermissions');
         Route::post('/roles/{id}/permissions',  'updateRolePermissions');
@@ -289,36 +307,35 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
 
     Route::controller(OrdersPlacedController::class)->group(function () {
-
         Route::get('/orders-placed', 'index');
+        Route::get('/orders-placed/customer', 'index_customer');
         Route::get('/orders-placed/packing', 'packing_index');
         Route::get('/orders-placed/dispatch', 'dispatch_index');
         Route::get('/orders-placed/shipment', 'shipment_index');
         Route::get('/orders-placed/delivered', 'delivered_index');
-
-
-
-
-
-
         Route::post('/orders-placed', 'store');
-
-
-
         Route::post('/orders-placed/{id}/pack', 'packing');
-
-
-
         Route::post('/orders-placed/{id}/dispatch', 'dispatch');
         Route::post('/orders-placed/{id}/shipment', 'shipment');
         Route::post('/orders-placed/complete/{id}', 'complete');
         Route::post('/orders-placed/{id}/cancel', 'cancel');
-
         Route::get('/orders-placed/{id}/overview', 'overview');
-
         Route::get('/orders-placed/{id}', 'show');
         Route::put('/orders-placed/{id}', 'update');
         Route::delete('/orders-placed/{id}', 'destroy');
+
+        Route::post('orders-placed/{id}/on-hold', 'putOnHold');
+        Route::post('orders-placed/{id}/remove-hold', 'removeOnHold');
+    });
+
+
+
+    Route::controller(LocationsController::class)->group(function () {
+
+        Route::get('/locations', 'index');
+        Route::post('/locations', 'store');
+        Route::put('/locations/{location}', 'update');
+        Route::delete('/locations/{location}', 'destroy');
     });
 
 
@@ -326,6 +343,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
     Route::controller(ContactDepartmentsController::class)->group(function () {
         Route::get('/contact/departments', 'index');
+        Route::get('/contact/departments/all', 'index_all');
         Route::post('/contact/departments', 'store');
     });
 
@@ -360,7 +378,9 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
 
     Route::prefix('geo')->group(function () {
-        Route::get('/countries', [CountryController::class, 'index']);                   // list countries
+        Route::get('/countries', [CountryController::class, 'index']);
+        Route::get('/countries/all', [CountryController::class, 'index_all']);  // list countries
+        Route::get('/regions/countries', [CountryController::class, 'index_regions']);          // create country
         Route::get('/regions',   [RegionController::class, 'index']);                    // ?country_id=
         Route::get('/districts', [DistrictController::class, 'index']);                  // list (optional filters)
         Route::post('/districts', [DistrictController::class, 'store']);                 // create
@@ -370,6 +390,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
         Route::get('/regions/by-country/{countryId}', [RegionController::class, 'byCountry']);
         Route::get('/districts/by-region/{regionId}',   [DistrictController::class, 'byRegion']);
+        Route::get('/cities/by-district/{districtId}',   [CityController::class, 'byDistrict']);
     });
 
 

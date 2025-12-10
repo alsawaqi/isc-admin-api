@@ -71,6 +71,7 @@ class ProductDepartmentsController extends Controller
             // Validate the request
             $request->validate([
                 'name' => 'required|string|max:255',
+                'namear' => 'required|string|max:255',
 
             ]);
 
@@ -94,6 +95,7 @@ class ProductDepartmentsController extends Controller
             ProductDepartments::create([
                 'Product_Department_Code' => $productDepartmentCode,
                 'Product_Department_Name' => $request->name,
+                'Product_Department_Name_Ar' => $request->namear,
                 'Image_path' => $imagePath,
                 'Image_Size' => $imageSize,
                 'Image_Extension' => $imageExtension,
@@ -124,6 +126,7 @@ class ProductDepartmentsController extends Controller
 
 
             $department->Product_Department_Name = $request->name;
+            $department->Product_Department_Name_Ar = $request->namear;
 
             if ($request->hasFile('image')) {
                 if ($department->Image_path) {

@@ -34,6 +34,7 @@ class ProductSubSubDepartmentController extends Controller
                     'Products_Departments_Id',
                     'Products_Sub_Department_Code',
                     'Sub_Department_Name',
+                    'Sub_Department_Name_Ar',
 
                 )
                     ->with([
@@ -43,6 +44,7 @@ class ProductSubSubDepartmentController extends Controller
                             'Product_Sub_Department_Id',
                             'Product_Sub_Sub_Department_Code',
                             'Product_Sub_Sub_Department_Name',
+                            'Product_Sub_Sub_Department_Name_Ar',
                             'Product_Sub_Sub_Department_Description',
                             'Image_Path',
                             'View_Options'
@@ -91,12 +93,12 @@ class ProductSubSubDepartmentController extends Controller
                 $productsubsubCode = CodeGenerator::createCode('SUBSUBDEPT', 'Products_Sub_Sub_Department_T', 'Product_Sub_Sub_Department_Code');
 
 
-                $new = ProductSubSubDepartment::create([
+              ProductSubSubDepartment::create([
                     'Product_Sub_Sub_Department_Code' => $productsubsubCode,
                     'Product_Sub_Department_Id' => $request->Product_Sub_Department_Id,
                     'Product_Sub_Sub_Department_Description' => $request->description,
                     'Product_Sub_Sub_Department_Name' => $request->Product_Sub_Sub_Department_Name,
-                    'Product_Sub_Sub_Department_Name_Ar' => $request->Product_Sub_Sub_Department_Name,
+                    'Product_Sub_Sub_Department_Name_Ar' => $request->Product_Sub_Sub_Department_Name_Ar,
                     'Image_Path' => $imagePath,
                     'Image_Size' => $imageSize,
                     'Image_Extension' => $imageExtension,
@@ -123,7 +125,7 @@ class ProductSubSubDepartmentController extends Controller
         try {
             // basic fields
             $subsub->Product_Sub_Sub_Department_Name = $request->input('Product_Sub_Sub_Department_Name', $subsub->Product_Sub_Sub_Department_Name);
-            $subsub->Product_Sub_Sub_Department_Name_Ar = $request->input('Product_Sub_Sub_Department_Name', $subsub->Product_Sub_Sub_Department_Name_Ar);
+            $subsub->Product_Sub_Sub_Department_Name_Ar = $request->input('Product_Sub_Sub_Department_Name_Ar', $subsub->Product_Sub_Sub_Department_Name_Ar);
             $subsub->Product_Sub_Sub_Department_Description = $request->input('description', $subsub->Product_Sub_Sub_Department_Description);
             $subsub->View_Options = $request->input('View_Options', $subsub->View_Options);
             if ($request->has('Product_Sub_Department_Id')) {

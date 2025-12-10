@@ -22,4 +22,9 @@ class ShipperContact extends Model
     {
         return $this->belongsTo(Shipper::class, 'Shippers_Id', 'id');
     }
+
+    public function department()
+    {
+        return $this->belongsTo(ContactDepartments::class, 'Contact_Department_Id', 'id');
+    }
 }

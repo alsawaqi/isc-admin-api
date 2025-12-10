@@ -16,6 +16,12 @@ class CityController extends Controller
         return response()->json(State::where('Country_Id', $countryId)->get());
     }
 
+
+    public function byDistrict($districtId)
+    {
+        return response()->json(City::where('District_Id', $districtId)->get());
+    }
+
     public function index(Request $request)
     {
         $q = City::query()

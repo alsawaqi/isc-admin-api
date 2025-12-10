@@ -12,7 +12,7 @@ use Illuminate\Http\Request;
 
 class ShipperContactController extends Controller
 {
-     public function index(Shipper $shipper)
+    public function index(Shipper $shipper)
     {
         $contacts = $shipper->contacts()->orderByDesc('Shippers_Is_Primary')->orderBy('id')->get();
         return ShipperContactResource::collection($contacts);
@@ -37,7 +37,7 @@ class ShipperContactController extends Controller
         $payload = $request->validated();
 
         if (array_key_exists('Shippers_Is_Primary', $payload) && $payload['Shippers_Is_Primary']) {
-            ShipperContact::where('Shippers_Id', $shipper->id)->where('id','<>',$contact->id)->update(['Shippers_Is_Primary' => false]);
+            ShipperContact::where('Shippers_Id', $shipper->id)->where('id', '<>', $contact->id)->update(['Shippers_Is_Primary' => false]);
         }
 
         $contact->update($payload);

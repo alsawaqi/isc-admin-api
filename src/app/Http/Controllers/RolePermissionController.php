@@ -14,11 +14,38 @@ use Illuminate\Http\Request;
 class RolePermissionController extends Controller
 {
 
-    public function index()
+    public function index(Request $request)
     {
+        $search   = $request->query('search');
+        $sortBy   = $request->query('sortBy', 'id');      // default
+        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $perPage  = (int) $request->query('per_page', 10);
+        $query = SecurityRole::query();
+
+        if ($search) {
+            $query->where('name', 'like', "%{$search}%");
+        }
        
-        $roles = SecurityRole::select('id', 'name', 'created_at')->get();
+
+
+          if (!in_array($sortBy, ['id', 'name', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+     
+
+        $roles = $query->paginate($perPage);
+
         return response()->json($roles);
+    }
+
+
+    public function index_all()
+    {
+        return response()->json(
+            SecurityRole::orderBy('id', 'DESC')->get()
+        );
     }
 
     /**

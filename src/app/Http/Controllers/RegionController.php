@@ -17,10 +17,32 @@ class RegionController extends Controller
         );
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $region = Region::with('country')->latest()->get();
-        return response()->json($region);
+        $search   = $request->query('search');
+        $sortBy   = $request->query('sortBy', 'id');      // default
+        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $perPage  = (int) $request->query('per_page', 10);
+
+
+        $query = Region::query();
+
+        $query->with('country');
+
+        if ($search) {
+            $query->where('Region_Name', 'like', "%{$search}%");
+        }
+
+        if (!in_array($sortBy, ['id', 'Region_Name', 'created_at'])) {
+            $sortBy = 'id';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+
+        return response()->json(
+            $query->paginate($perPage)
+        );
+      
     }
 
 

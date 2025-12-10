@@ -11,4 +11,8 @@ class Customers extends Model
     public function users(){
          return $this->belongsTo(SecxUser::class,'User_Id');
     }
+
+    public function loyalty(){
+        return $this->hasMany(CustomersLoyalty::class,'Customer_Id','id');
+    }
 }

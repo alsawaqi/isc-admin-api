@@ -18,7 +18,7 @@ class User extends Authenticatable
     protected $table = 'Secx_Admin_User_Master_T';
 
 
- 
+
 
     /**
      * The attributes that are mass assignable.
@@ -30,6 +30,8 @@ class User extends Authenticatable
         'User_Name',
         'Email',
         'Password',
+        'Status',
+        'No_Login',
     ];
 
     /**
@@ -64,7 +66,9 @@ class User extends Authenticatable
     }
 
 
-  public function notifications()
+
+
+    public function notifications()
     {
         return $this->morphMany(\App\Models\ConxDatabaseNotification::class, 'notifiable')
             ->orderBy('created_at', 'desc');

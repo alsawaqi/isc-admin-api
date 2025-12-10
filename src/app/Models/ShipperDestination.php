@@ -41,16 +41,51 @@ class ShipperDestination extends Model
             ->where('Shippers_Id', $this->Shippers_Id);
     }
 
-    /** NEW: box rates available for this destination */
     public function boxRates()
     {
         return $this->hasMany(ShipperBoxRate::class, 'Shippers_Destination_Id', 'id');
     }
 
-
     public function volumetricRule()
     {
         return $this->hasOne(ShipperVolumetricRule::class, 'Shippers_Destination_Id', 'id')
             ->where('Shippers_Id', $this->Shippers_Id);
+    }
+
+
+    public function country()
+    {
+        return $this->belongsTo(Country::class, 'Shippers_Destination_Country_Id', 'id');
+    }
+
+
+
+    public function region()
+    {
+        return $this->belongsTo(Region::class, 'Shippers_Destination_Region_Id', 'id');
+    }
+
+
+    public function district()
+    {
+        return $this->belongsTo(District::class, 'Shippers_Destination_District_Id', 'id');
+    }
+
+
+
+    public function volumetricRules()
+    {
+        return $this->hasOne(ShipperVolumetricRule::class, 'Shippers_Destination_Id', 'id');
+    }
+
+    /** ✅ Aliases used in show(): destinations.volumeBands / destinations.weightBands */
+    public function volumeBands()
+    {
+        return $this->volumeRates();
+    }
+
+    public function weightBands()
+    {
+        return $this->weightRates();
     }
 }
