@@ -67,12 +67,12 @@ class ProductDepartmentsController extends Controller
 
     public function store(Request $request)
     {
-        try {
+
+       try {
             // Validate the request
             $request->validate([
                 'name' => 'required|string|max:255',
                 'namear' => 'required|string|max:255',
-
             ]);
 
             $imagePath = null;
@@ -108,6 +108,8 @@ class ProductDepartmentsController extends Controller
 
             ], 500);
         }
+    
+    
     }
 
 
@@ -115,7 +117,7 @@ class ProductDepartmentsController extends Controller
     public function update(ProductDepartments $productdepartment, Request $request)
     {
 
-        //return response()->json($request->hasFile('image'), 200);
+       //return response()->json($request->hasFile('image'), 200);
 
         try {
             // You don't actually need to find again, because $productdepartment is already resolved.
@@ -176,12 +178,8 @@ class ProductDepartmentsController extends Controller
     public function destroy(ProductDepartments $productdepartment)
     {
         try {
-
-
-
             DB::transaction(function () use ($productdepartment) {
-                //
-
+               
                 if (!empty($productdepartment->image_path) && Storage::disk('r2')->exists($productdepartment->image_path)) {
                     Storage::disk('r2')->delete($productdepartment->image_path);
                 }
@@ -193,8 +191,7 @@ class ProductDepartmentsController extends Controller
                 // Return a success response
                 return response()->json(['message' => 'Product department deleted successfully'], 200);
             });
-        } catch (\Exception $e) {
-            // Handle any errors that occur during deletion
+         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }

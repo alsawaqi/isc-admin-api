@@ -45,7 +45,7 @@ class ProductBrandsController extends Controller
     public function store(Request $request)
     {
 
-        $imagePath = null;
+    $imagePath = null;
         $imageSize = null;
         $imageExtension = null;
         $imageType = null;
@@ -74,7 +74,7 @@ class ProductBrandsController extends Controller
         ]);
 
         return response()->json(['message' => 'Product brand created successfully'], 201);
-    }
+     }
 
     public function update(Request $request, ProductBrands $productbrand)
     {

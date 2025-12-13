@@ -14,6 +14,7 @@ class SecurityPermissionSeeder extends Seeder
     public function run(): void
     {
          $permissions = [
+            'dashboard',
             'products',
             'product category',
             'departments',
@@ -57,7 +58,16 @@ class SecurityPermissionSeeder extends Seeder
             'country',
             'state',
             'city',
+            'locations',
+            'contact departments',
+            'customer types',
+            'customers',
+            'shippingservices',
+            'create shippers',
+            'view shippers'
         ];
+
+        
 
         foreach ($permissions as $permission) {
             SecurityPermission::firstOrCreate(['name' => $permission]);

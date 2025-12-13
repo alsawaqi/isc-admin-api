@@ -4,11 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class ProductBrands extends Model
+class Vat extends Model
 {
-    //
-
-    protected $table = 'Products_Brands_Master_T';
+    public $table = 'Vat_Master_T';
 
     protected $guarded = [];
 }

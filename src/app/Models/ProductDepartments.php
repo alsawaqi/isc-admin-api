@@ -6,13 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class ProductDepartments extends Model
 {
-    //
     protected $table = 'Products_Departments_T';
-
     protected $guarded = [];
 
-
-   public function subDepartments(){
+    public function subDepartments(){
         return $this->hasMany(ProductSubDepartment::class, 'Products_Departments_Id', 'id');
     }
 }
+  

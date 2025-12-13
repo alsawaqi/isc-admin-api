@@ -73,5 +73,26 @@ class ContactDepartmentsController extends Controller
        
 
         return response()->json(['message' => 'Contact department created successfully', 'data' => $contactDepartment], 201);
-    }   
+    } 
+    
+    Public function update(Request $request, ContactDepartments $department)
+    {
+        $request->validate([
+            'Department_Name' => 'required|string|max:255',
+            'Department_Initials' => 'required|string|max:10',
+        ]);
+
+        $department->Department_Name = $request->Department_Name;
+        $department->Department_Initials = $request->Department_Initials;
+        $department->save();
+
+        return response()->json(['message' => 'Contact department updated successfully', 'data' => $department], 200);
+    }
+
+    public function destroy(ContactDepartments $department)
+    {
+        $department->delete();
+
+        return response()->json(['message' => 'Contact department deleted successfully'], 200);
+    }
 }

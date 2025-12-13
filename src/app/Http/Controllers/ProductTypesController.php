@@ -72,4 +72,11 @@ class ProductTypesController extends Controller
 
         return response()->json(['message' => 'Product type updated successfully', 'data' => ''], 200);
     }
+
+    public function destroy(ProductTypes $producttype)
+    {
+        $producttype->delete();
+
+        return response()->json(['message' => 'Product type deleted successfully', 'data' => ''], 200);
+    }
 }

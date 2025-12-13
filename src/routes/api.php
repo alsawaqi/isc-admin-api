@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Laravel\Fortify\RoutePath;
 use Laravel\Nightwatch\Location;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\VatController;
 use App\Http\Controllers\CityController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\StateController;
@@ -16,6 +17,7 @@ use App\Http\Controllers\ShipperController;
 use App\Notifications\NewOrderNotification;
 use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\CustomersController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HeavyRateController;
 use App\Http\Controllers\LocationsController;
 use App\Http\Controllers\CustomerTypeController;
@@ -27,6 +29,7 @@ use App\Http\Controllers\AuthenticatedController;
 use App\Http\Controllers\ProductBrandsController;
 use App\Http\Controllers\ProductImagesController;
 use App\Http\Controllers\ProductMasterController;
+use App\Http\Controllers\LoyalityPointsController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\ShipperContactController;
 use App\Http\Controllers\ProductsBarcodesController;
@@ -249,6 +252,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/producttype/all', 'index_all');
         Route::post('/producttype', 'store');
         Route::put('/producttype/{producttype}', 'update');
+        Route::delete('/producttype/{producttype}', 'destroy');
     });
 
 
@@ -290,6 +294,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::post('/roles',  'storeRole');
         Route::get('/roles/{id}/permissions',  'getRolePermissions');
         Route::post('/roles/{id}/permissions',  'updateRolePermissions');
+        Route::delete('/roles/{id}',  'deleteRole');
         Route::post('/permissions',  'storePermission');
         Route::post('/assign-role',   'assignRole');
     });
@@ -339,12 +344,39 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     });
 
 
+    Route::controller(LoyalityPointsController::class)->group(function () {
 
+        Route::get('/loyality', 'index');
+        Route::post('/loyality', 'store');
+    });
+
+
+    Route::controller(VatController::class)->group(function () {
+
+        Route::get('/vat', 'index');
+        Route::post('/vat', 'update');
+    });
+
+
+
+    Route::get('/dashboard/revenue-chart', [DashboardController::class, 'revenueChart']);
+    Route::get('/dashboard/customers-donut', [DashboardController::class, 'customersDonut']);
+
+    Route::get('/dashboard/kpis', [DashboardController::class, 'kpis']);
+
+    Route::get('/dashboard/recent-orders', [DashboardController::class, 'recentOrders']);
+    Route::get('/dashboard/transactions-feed', [DashboardController::class, 'transactionsFeed']);
+    Route::get('/dashboard/orders-trend', [DashboardController::class, 'ordersTrend']);
+    Route::get('/dashboard/top-products', [DashboardController::class, 'topProducts']);
+
+    Route::get('/dashboard/stock-report', [DashboardController::class, 'stockReport']);
 
     Route::controller(ContactDepartmentsController::class)->group(function () {
         Route::get('/contact/departments', 'index');
         Route::get('/contact/departments/all', 'index_all');
         Route::post('/contact/departments', 'store');
+        Route::put('/contact/departments/{department}', 'update');
+        Route::delete('/contact/departments/{department}', 'destroy');
     });
 
 
