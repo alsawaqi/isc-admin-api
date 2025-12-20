@@ -25,7 +25,7 @@ class VatController extends Controller
 
         try {
             $vat = Vat::first();
-            $vat->Vat = $request->input('Vat');
+            $vat->Vat = $request->input('Vat') / 100;
             $vat->save();
 
             return response()->json(['message' => 'VAT percentage updated successfully.']);
