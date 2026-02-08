@@ -1,60 +1,52 @@
 <?php
 
-use App\Models\User;
-use App\Models\CustomerType;
-use App\Models\SecurityRole;
-use Illuminate\Http\Request;
-use Laravel\Fortify\RoutePath;
-use Laravel\Nightwatch\Location;
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\VatController;
+use App\Http\Controllers\AdminTempProductController;
 use App\Http\Controllers\CityController;
-use App\Http\Controllers\UserController;
-use App\Http\Controllers\StateController;
-use App\Http\Controllers\RegionController;
+use App\Http\Controllers\ContactDepartmentsController;
 use App\Http\Controllers\CountryController;
-use App\Http\Controllers\ShipperController;
-use App\Notifications\NewOrderNotification;
-use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\CustomersController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\HeavyRateController;
-use App\Http\Controllers\LocationsController;
 use App\Http\Controllers\CustomerTypeController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DistrictController;
+use App\Http\Controllers\HeavyRateController;
 use App\Http\Controllers\HeavyVehicleController;
-use App\Http\Controllers\NotificationController;
-use App\Http\Controllers\OrdersPlacedController;
-use App\Http\Controllers\ProductTypesController;
-use App\Http\Controllers\AuthenticatedController;
-use App\Http\Controllers\ProductBrandsController;
-use App\Http\Controllers\ProductImagesController;
-use App\Http\Controllers\ProductMasterController;
+use App\Http\Controllers\LocationsController;
 use App\Http\Controllers\LoyalityPointsController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\NotificationDeviceController;
+use App\Http\Controllers\OrdersPlacedController;
+use App\Http\Controllers\ProductBrandsController;
+use App\Http\Controllers\ProductDepartmentsController;
+use App\Http\Controllers\ProductImagesController;
+use App\Http\Controllers\ProductManufactureController;
+use App\Http\Controllers\ProductMasterController;
+use App\Http\Controllers\ProductsBarcodesController;
+use App\Http\Controllers\ProductSpecificationDescriptionController;
+use App\Http\Controllers\ProductSpecificationProductController;
+use App\Http\Controllers\ProductSubDepartmentController;
+use App\Http\Controllers\ProductSubSubDepartmentController;
+use App\Http\Controllers\ProductTypesController;
+use App\Http\Controllers\RegionController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\ShipperContactController;
-use App\Http\Controllers\ProductsBarcodesController;
+use App\Http\Controllers\ShipperController;
+use App\Http\Controllers\ShipperDestinationController;
+use App\Http\Controllers\ShipperShippingRateController;
 use App\Http\Controllers\ShipperVolumeRateController;
 use App\Http\Controllers\ShipperWeightRateController;
-use App\Http\Controllers\ContactDepartmentsController;
-use App\Http\Controllers\NotificationDeviceController;
-use App\Http\Controllers\ProductDepartmentsController;
-use App\Http\Controllers\ProductManufactureController;
-use App\Http\Controllers\ShipperDestinationController;
+use App\Http\Controllers\StateController;
 use App\Http\Controllers\SupportTicketAdminController;
-use App\Http\Controllers\ShipperShippingRateController;
-use App\Http\Controllers\ProductSubDepartmentController;
-use App\Http\Controllers\NotificationBroadcastController;
-use App\Http\Controllers\ProductSubSubDepartmentController;
-use App\Http\Controllers\ProductSpecificationProductController;
-use App\Http\Controllers\ProductSpecificationDescriptionController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\VatController;
+use App\Http\Controllers\VendorController;
+use App\Http\Controllers\VendorUserController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
+use Laravel\Fortify\RoutePath;
+use App\Http\Controllers\Admin\VendorOrdersController;
 
 Route::group(['middleware' => 'auth:sanctum'], function () {
-
-
-
-
-
     Route::get('/user', function (Request $request) {
         $user = $request->user();
 
@@ -67,25 +59,38 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         ]);
     });
 
-
     Route::controller(UserController::class)->group(function () {
-
         Route::post('/users', 'store');
         Route::get('/users-with-roles', 'getUsersWithRoles');
-        Route::post('/users/{id}/block',   'block');
+        Route::post('/users/{id}/block', 'block');
         Route::post('/users/{id}/unblock', 'unblock');
         Route::post('/users/{user}/change-password', 'changePassword');
     });
 
+    Route::get('/vendor-users', [VendorUserController::class, 'index']);
+    Route::post('/vendor-users', [VendorUserController::class, 'store']);
+    Route::put('/vendor-users/{id}', [VendorUserController::class, 'update']);
+    Route::delete('/vendor-users/{id}', [VendorUserController::class, 'destroy']);
+    Route::post('/vendor-users/{id}/reset-password', [VendorUserController::class, 'resetPassword']);
 
+    Route::prefix('vendors')->group(function () {
+        Route::get('/', [VendorController::class, 'index']);
+        Route::post('/', [VendorController::class, 'store']);
+        Route::put('/{id}', [VendorController::class, 'update']);
+        Route::delete('/{id}', [VendorController::class, 'destroy']);
+    });
+
+    // Vendors dropdown (for creating vendor users)
+    Route::get('/vendors/all', [VendorController::class, 'all']);
+
+    // Vendor Users CRUD
+    Route::get('/vendor-users', [VendorUserController::class, 'index']);
+    Route::post('/vendor-users', [VendorUserController::class, 'store']);
 
     Route::controller(NotificationDeviceController::class)->group(function () {
-
         Route::post('/notification-devices', 'storeOrUpdate');
         Route::post('/notification-devices/disable', 'disableCurrentDevice');
     });
-
-
 
     Route::controller(SupportTicketAdminController::class)->group(function () {
         Route::get('/admin/support-tickets', 'index');
@@ -93,8 +98,6 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::post('/admin/support-tickets/{id}/reply', 'reply');
         Route::patch('/admin/support-tickets/{id}/status', 'updateStatus');
     });
-
-
 
     Route::controller(ProductDepartmentsController::class)->group(function () {
         Route::get('/productdepartment', 'index');
@@ -106,15 +109,12 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::delete('/productdepartment/{productdepartment}', 'destroy');
     });
 
-
     Route::controller(NotificationController::class)->group(function () {
         Route::get('/notifications', 'index');
         Route::post('/notifications/mark-as-read', 'markAllRead');
     });
 
-
     Route::controller(ProductBrandsController::class)->group(function () {
-
         Route::get('/productbrands', 'index');
         Route::get('/productbrands/all', 'index_all');
         Route::post('/productbrands', 'store');
@@ -122,21 +122,17 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::delete('/productbrands/{productbrand}', 'destroy');
     });
 
-
     Route::controller(ProductsBarcodesController::class)->group(function () {
         Route::get('/productmaster/{id}/barcodes', 'getProductBarcodes');
         Route::post('/productmaster/{id}/barcodes', 'updateProductBarcodes');
     });
-
 
     Route::controller(ProductImagesController::class)->group(function () {
         Route::post('/product-images/{product}', 'uploadImages');
         Route::get('/product-images/{product}', 'getImages');
     });
 
-
     Route::controller(ProductMasterController::class)->group(function () {
-
         Route::get('/productmaster', 'index');
         Route::get('/latest-products', 'getLatestProducts');
         Route::post('/productmaster', 'store');
@@ -145,9 +141,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::delete('/productmaster/{productmaster}', 'destroy');
     });
 
-
     Route::controller(CustomersController::class)->group(function () {
-
         Route::get('/customers', 'index');
         Route::get('/customers/carts', 'index_carts');
         Route::get('/customers/favorites', 'index_favorites');
@@ -155,13 +149,22 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::post('/customers/{id}/unblock', 'unblock');
     });
 
-
     Route::controller(CustomerTypeController::class)->group(function () {
-
         Route::get('/customer-types', 'index');
         Route::post('/customer-types', 'store');
         Route::put('/customer-types/{customertype}', 'update');
         Route::delete('/customer-types/{customertype}', 'destroy');
+    });
+
+
+    Route::prefix('admin')->group(function () {
+        Route::get('vendor-orders', [VendorOrdersController::class, 'index']);
+        Route::get('vendor-orders/{id}', [VendorOrdersController::class, 'show']);
+        Route::post('vendor-orders/{id}/commission', [VendorOrdersController::class, 'setCommission']);
+        Route::get('/vendor-orders/commissions-set', [VendorOrdersController::class, 'getcommissionsset']);
+
+        Route::post('vendor-orders/{id}/payout', [VendorOrdersController::class, 'markPayoutPaid']);
+
     });
 
     Route::prefix('v1/shipping')->group(function () {
@@ -188,8 +191,6 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::patch('/destinations/{destination}', [ShipperDestinationController::class, 'update']);
         Route::delete('/destinations/{destination}', [ShipperDestinationController::class, 'destroy']);
 
-
-
         // Shipping Rates (applicability per destination)
         Route::get('/destinations/{destination}/shipping-rates', [ShipperShippingRateController::class, 'index']);
         Route::post('/destinations/{destination}/shipping-rates', [ShipperShippingRateController::class, 'store']);
@@ -197,22 +198,19 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::patch('/shipping-rates/{rate}', [ShipperShippingRateController::class, 'update']);
         Route::delete('/shipping-rates/{rate}', [ShipperShippingRateController::class, 'destroy']);
 
-
         // Volume Rates (nested by destination)
-        Route::get('/destinations/{destination}/volume-rates',   [ShipperVolumeRateController::class, 'index']);
-        Route::post('/destinations/{destination}/volume-rates',  [ShipperVolumeRateController::class, 'store']);
-        Route::put('/volume-rates/{rate}',   [ShipperVolumeRateController::class, 'update']);
+        Route::get('/destinations/{destination}/volume-rates', [ShipperVolumeRateController::class, 'index']);
+        Route::post('/destinations/{destination}/volume-rates', [ShipperVolumeRateController::class, 'store']);
+        Route::put('/volume-rates/{rate}', [ShipperVolumeRateController::class, 'update']);
         Route::patch('/volume-rates/{rate}', [ShipperVolumeRateController::class, 'update']);
         Route::delete('/volume-rates/{rate}', [ShipperVolumeRateController::class, 'destroy']);
 
         // Weight Rates (nested by destination)
-        Route::get('/destinations/{destination}/weight-rates',   [ShipperWeightRateController::class, 'index']);
-        Route::post('/destinations/{destination}/weight-rates',  [ShipperWeightRateController::class, 'store']);
-        Route::put('/weight-rates/{rate}',   [ShipperWeightRateController::class, 'update']);
+        Route::get('/destinations/{destination}/weight-rates', [ShipperWeightRateController::class, 'index']);
+        Route::post('/destinations/{destination}/weight-rates', [ShipperWeightRateController::class, 'store']);
+        Route::put('/weight-rates/{rate}', [ShipperWeightRateController::class, 'update']);
         Route::patch('/weight-rates/{rate}', [ShipperWeightRateController::class, 'update']);
         Route::delete('/weight-rates/{rate}', [ShipperWeightRateController::class, 'destroy']);
-
-
 
         // Heavy Vehicles (per shipper)
         Route::get('/shippers/{shipper}/vehicles', [HeavyVehicleController::class, 'index']);
@@ -230,7 +228,6 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::delete('/heavy-rates/{rate}', [HeavyRateController::class, 'destroy']);
     });
 
-
     Route::controller(ProductSpecificationProductController::class)->group(function () {
         Route::post('/product-specifications-update', 'storeOrUpdate');
         Route::post('/product-specification-products', 'store');
@@ -245,8 +242,6 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::delete('/productmanufacture/{productmanufacture}', 'destroy');
     });
 
-
-
     Route::controller(ProductTypesController::class)->group(function () {
         Route::get('/producttype', 'index');
         Route::get('/producttype/all', 'index_all');
@@ -255,17 +250,14 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::delete('/producttype/{producttype}', 'destroy');
     });
 
-
     Route::controller(ProductSubDepartmentController::class)->group(function () {
         Route::get('/productsubdepartment', 'index');
-
 
         Route::get('/product-departments-with-sub', 'getWithSubDepartments');
         Route::post('/productsubdepartment', 'store');
         Route::delete('/productsubdepartment/{productsubdepartment}', 'destroy');
         Route::post('/productsubdepartment/{productsubdepartment}', 'update');
     });
-
 
     Route::controller(ProductSpecificationDescriptionController::class)->group(function () {
         Route::get('/product-specifications', 'index');
@@ -276,9 +268,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::delete('/product-specification-values/{id}', 'destroyValue');
     });
 
-
     Route::controller(ProductSubSubDepartmentController::class)->group(function () {
-
         Route::get('/full-product-department-tree', 'getFullDepartmentTree');
         Route::get('/sub-sub-departments', 'index');
         Route::post('/sub-sub-departments', 'store');
@@ -286,30 +276,23 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::delete('/sub-sub-departments/{productsubsub}', 'destroy');
     });
 
-
-
     Route::controller(RolePermissionController::class)->group(function () {
-        Route::get('/roles',  'index');
-        Route::get('/roles/all',  'index_all');
-        Route::post('/roles',  'storeRole');
-        Route::get('/roles/{id}/permissions',  'getRolePermissions');
-        Route::post('/roles/{id}/permissions',  'updateRolePermissions');
-        Route::delete('/roles/{id}',  'deleteRole');
-        Route::post('/permissions',  'storePermission');
-        Route::post('/assign-role',   'assignRole');
+        Route::get('/roles', 'index');
+        Route::get('/roles/all', 'index_all');
+        Route::post('/roles', 'storeRole');
+        Route::get('/roles/{id}/permissions', 'getRolePermissions');
+        Route::post('/roles/{id}/permissions', 'updateRolePermissions');
+        Route::delete('/roles/{id}', 'deleteRole');
+        Route::post('/permissions', 'storePermission');
+        Route::post('/assign-role', 'assignRole');
     });
 
-
-
     Route::controller(CountryController::class)->group(function () {
-
         Route::get('/countries', 'index');
         Route::post('/countries', 'store');
         Route::put('/countries/{country}', 'update');
         Route::delete('/countries/{country}', 'destroy');
     });
-
-
 
     Route::controller(OrdersPlacedController::class)->group(function () {
         Route::get('/orders-placed', 'index');
@@ -333,31 +316,22 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::post('orders-placed/{id}/remove-hold', 'removeOnHold');
     });
 
-
-
     Route::controller(LocationsController::class)->group(function () {
-
         Route::get('/locations', 'index');
         Route::post('/locations', 'store');
         Route::put('/locations/{location}', 'update');
         Route::delete('/locations/{location}', 'destroy');
     });
 
-
     Route::controller(LoyalityPointsController::class)->group(function () {
-
         Route::get('/loyality', 'index');
         Route::post('/loyality', 'store');
     });
 
-
     Route::controller(VatController::class)->group(function () {
-
         Route::get('/vat', 'index');
         Route::post('/vat', 'update');
     });
-
-
 
     Route::get('/dashboard/revenue-chart', [DashboardController::class, 'revenueChart']);
     Route::get('/dashboard/customers-donut', [DashboardController::class, 'customersDonut']);
@@ -379,27 +353,20 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::delete('/contact/departments/{department}', 'destroy');
     });
 
-
-
     Route::controller(StateController::class)->group(function () {
         Route::get('/states', 'index');
         Route::post('/states', 'store');
         Route::get('/states/countries', 'countries_index');
     });
 
-
-
     Route::controller(RegionController::class)->group(function () {
-
         Route::get('/regions', 'index');
         Route::post('/regions', 'store');
         Route::put('/regions/{region}', 'update');
         Route::get('/regions/countries', 'countries_index');
     });
 
-
     Route::controller(CityController::class)->group(function () {
-
         Route::get('/geo/cities', 'index');
         Route::post('/geo/cities', 'store');
         Route::put('/geo/cities/{city}', 'update');
@@ -408,12 +375,11 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/states/by-country/{countryId}', 'byCountry');
     });
 
-
     Route::prefix('geo')->group(function () {
         Route::get('/countries', [CountryController::class, 'index']);
         Route::get('/countries/all', [CountryController::class, 'index_all']);  // list countries
         Route::get('/regions/countries', [CountryController::class, 'index_regions']);          // create country
-        Route::get('/regions',   [RegionController::class, 'index']);                    // ?country_id=
+        Route::get('/regions', [RegionController::class, 'index']);                    // ?country_id=
         Route::get('/districts', [DistrictController::class, 'index']);                  // list (optional filters)
         Route::post('/districts', [DistrictController::class, 'store']);                 // create
         Route::get('/districts/{district}', [DistrictController::class, 'show']);        // single
@@ -421,10 +387,22 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::delete('/districts/{district}', [DistrictController::class, 'destroy']);  // delete
 
         Route::get('/regions/by-country/{countryId}', [RegionController::class, 'byCountry']);
-        Route::get('/districts/by-region/{regionId}',   [DistrictController::class, 'byRegion']);
-        Route::get('/cities/by-district/{districtId}',   [CityController::class, 'byDistrict']);
+        Route::get('/districts/by-region/{regionId}', [DistrictController::class, 'byRegion']);
+        Route::get('/cities/by-district/{districtId}', [CityController::class, 'byDistrict']);
     });
 
+    Route::prefix('admin')->group(function () {
+        Route::get('/products-temp/vendors', [AdminTempProductController::class, 'vendors']);
+        Route::get('/products-temp/vendors/{vendorId}', [AdminTempProductController::class, 'vendorProducts']);
+        Route::get('/products-temp/{tempId}', [AdminTempProductController::class, 'show']);
+        
+        Route::post('/products-temp/{tempId}/review', [AdminTempProductController::class, 'review']);
+        Route::post('/products-temp/{tempId}/reject', [AdminTempProductController::class, 'reject']);
+        Route::post('/products-temp/{tempId}/approve', [AdminTempProductController::class, 'approve']);
+
+        Route::post('/products-temp/bulk/approve', [AdminTempProductController::class, 'bulkApprove']); // ✅ new
+        Route::post('/products-temp/bulk/reject', [AdminTempProductController::class, 'bulkReject']);
+    });
 
     Route::post(RoutePath::for('logout', '/logout'), [AuthenticatedSessionController::class, 'destroy']);
 });

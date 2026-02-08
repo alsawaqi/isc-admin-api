@@ -20,7 +20,7 @@ class ProductMasterController extends Controller
 
     public function index(Request $request)
     {
-     
+
 
         $search   = $request->query('search');
         $sortBy   = $request->query('sortBy', 'id');      // default
@@ -46,7 +46,6 @@ class ProductMasterController extends Controller
         $products = $query->orderBy($sortBy, $sortDir)->paginate($perPage);
 
         return response()->json($products);
-    
     }
 
 
@@ -196,20 +195,19 @@ class ProductMasterController extends Controller
     }
 
 
- 
-     Public function show(ProductMaster $productmaster){
+
+    public function show(ProductMaster $productmaster)
+    {
         return response()->json($productmaster);
-     }
+    }
 
 
-     public function update(Request $request, ProductMaster $productmaster)
+    public function update(Request $request, ProductMaster $productmaster)
     {
 
         $product = ProductMaster::where('id', $productmaster->id)->first();
 
-         $product->update($request->all());
-       
-
+        $product->update($request->all());
     }
 
     public function destroy(ProductMaster $productmaster)

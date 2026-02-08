@@ -42,4 +42,10 @@ class OrdersPlaced extends Model
     {
         return $this->hasMany(OrderProcessLog::class, 'Orders_Placed_Id');
     }
+
+
+    public function location(): mixed
+    {
+        return $this->belongsTo(Locations::class, 'Location_Id');
+    }
 }
