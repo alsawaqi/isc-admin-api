@@ -158,13 +158,12 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
 
     Route::prefix('admin')->group(function () {
-        Route::get('vendor-orders', [VendorOrdersController::class, 'index']);
-        Route::get('vendor-orders/{id}', [VendorOrdersController::class, 'show']);
-        Route::post('vendor-orders/{id}/commission', [VendorOrdersController::class, 'setCommission']);
-        Route::get('/vendor-orders/commissions-set', [VendorOrdersController::class, 'getcommissionsset']);
-
-        Route::post('vendor-orders/{id}/payout', [VendorOrdersController::class, 'markPayoutPaid']);
-
+        Route::get('/vendor-orders', [VendorOrdersController::class, 'index']);
+        Route::get('/vendor-orders/commissions-set', [VendorOrdersController::class, 'getCommissionsSet']); // <-- move up
+        Route::get('/vendor-orders/{id}', [VendorOrdersController::class, 'show']);
+    
+        Route::post('/vendor-orders/{id}/commission', [VendorOrdersController::class, 'setCommission']);
+        Route::post('/vendor-orders/{id}/payout', [VendorOrdersController::class, 'markPayoutPaid']);
     });
 
     Route::prefix('v1/shipping')->group(function () {
