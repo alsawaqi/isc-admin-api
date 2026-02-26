@@ -45,6 +45,7 @@ use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
 use Laravel\Fortify\RoutePath;
 use App\Http\Controllers\Admin\VendorOrdersController;
+use App\Http\Controllers\UiSlidersController;
 
 Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::get('/user', function (Request $request) {
@@ -109,6 +110,17 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::delete('/productdepartment/{productdepartment}', 'destroy');
     });
 
+
+
+    Route::controller(UiSlidersController::class)->group(function () {
+        Route::get('/ui-sliders', 'index');
+        Route::post('/ui-sliders', 'store');
+        Route::post('/ui-sliders/{id}', 'update');     // keep POST like some of your other updates
+        Route::delete('/ui-sliders/{id}', 'destroy');
+        Route::post('/ui-sliders/{id}/toggle', 'toggle');
+        Route::post('/ui-sliders/reorder', 'reorder');
+    });
+
     Route::controller(NotificationController::class)->group(function () {
         Route::get('/notifications', 'index');
         Route::post('/notifications/mark-as-read', 'markAllRead');
@@ -161,7 +173,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/vendor-orders', [VendorOrdersController::class, 'index']);
         Route::get('/vendor-orders/commissions-set', [VendorOrdersController::class, 'getCommissionsSet']); // <-- move up
         Route::get('/vendor-orders/{id}', [VendorOrdersController::class, 'show']);
-    
+
         Route::post('/vendor-orders/{id}/commission', [VendorOrdersController::class, 'setCommission']);
         Route::post('/vendor-orders/{id}/payout', [VendorOrdersController::class, 'markPayoutPaid']);
     });
@@ -394,7 +406,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/products-temp/vendors', [AdminTempProductController::class, 'vendors']);
         Route::get('/products-temp/vendors/{vendorId}', [AdminTempProductController::class, 'vendorProducts']);
         Route::get('/products-temp/{tempId}', [AdminTempProductController::class, 'show']);
-        
+
         Route::post('/products-temp/{tempId}/review', [AdminTempProductController::class, 'review']);
         Route::post('/products-temp/{tempId}/reject', [AdminTempProductController::class, 'reject']);
         Route::post('/products-temp/{tempId}/approve', [AdminTempProductController::class, 'approve']);
