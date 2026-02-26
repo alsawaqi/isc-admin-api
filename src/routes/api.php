@@ -142,6 +142,9 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::controller(ProductImagesController::class)->group(function () {
         Route::post('/product-images/{product}', 'uploadImages');
         Route::get('/product-images/{product}', 'getImages');
+
+         // ✅ NEW
+    Route::delete('/product-images/{image}', 'destroy');
     });
 
     Route::controller(ProductMasterController::class)->group(function () {

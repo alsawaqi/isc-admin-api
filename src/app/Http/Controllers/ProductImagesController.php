@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Storage;
 
 class ProductImagesController extends Controller
 {
-
     public function getImages($productId)
     {
         $images = ProductImages::where('Products_Id', $productId)
@@ -26,18 +25,13 @@ class ProductImagesController extends Controller
             foreach ($request->file('file') as $file) {
                 $path = Storage::disk('r2')->put('Products', $file, 'public');
 
-                $imagePath = $path;
-                $imageSize = $file->getSize();
-                $imageExtension = $file->getClientOriginalExtension();
-                $imageType = $file->getMimeType();
-
                 ProductImages::create([
                     'Product_Image_Code' => CodeGenerator::createCode('PIMG', 'Products_Images_T', 'Product_Image_Code'),
                     'Products_Id' => $productId,
-                    'Image_Path' => $imagePath,
-                    'Image_Size' => $imageSize,
-                    'Image_Extension' => $imageExtension,
-                    'Image_Type' => $imageType,
+                    'Image_Path' => $path,
+                    'Image_Size' => $file->getSize(),
+                    'Image_Extension' => $file->getClientOriginalExtension(),
+                    'Image_Type' => $file->getMimeType(),
                     'Created_By' => Auth::id(),
                     'Created_Date' => now(),
                 ]);
@@ -53,5 +47,22 @@ class ProductImagesController extends Controller
             'success' => false,
             'message' => 'No files provided'
         ], 400);
+    }
+
+    // ✅ NEW: delete one image (DB + R2)
+    public function destroy($imageId)
+    {
+        $img = ProductImages::findOrFail($imageId);
+
+        if (!empty($img->Image_Path)) {
+            Storage::disk('r2')->delete($img->Image_Path);
+        }
+
+        $img->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Image deleted successfully'
+        ]);
     }
 }

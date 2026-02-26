@@ -76,9 +76,7 @@ class ProductSpecificationDescriptionController extends Controller
                         'Product_Specification_Description_Name' => $spec['name'],
                         'input_type'   => $spec['input_type'],
                         // keep options_json for UI filters if you want
-                        'options_json' => $values->isNotEmpty()
-                            ? json_encode($values->all(), JSON_UNESCAPED_UNICODE)
-                            : null,
+                        'options_json' => $values->isNotEmpty() ? $values->all() : null,
                         'is_required'  => $spec['is_required'] ?? false,
                         'sort_order'   => $spec['sort_order'] ?? ($i + 1),
                         'is_active'    => $spec['is_active'] ?? false,
