@@ -6,6 +6,7 @@ use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class DashboardController extends Controller
 {
@@ -366,6 +367,380 @@ public function stockReport(Request $request)
 
     return response()->json([
         'data' => $rows
+    ]);
+}
+
+private function dashboardRange(Request $request): array
+{
+    $range = (string) $request->get('range', '30d');
+    $to = now()->endOfDay();
+
+    $from = match ($range) {
+        'today' => now()->startOfDay(),
+        '7d' => now()->subDays(6)->startOfDay(),
+        '90d' => now()->subDays(89)->startOfDay(),
+        'year' => now()->startOfYear(),
+        default => now()->subDays(29)->startOfDay(),
+    };
+
+    return [$from, $to, $range];
+}
+
+private function previousRange(Carbon $from, Carbon $to): array
+{
+    $days = max(1, $from->diffInDays($to) + 1);
+
+    return [
+        $from->copy()->subDays($days)->startOfDay(),
+        $from->copy()->subDay()->endOfDay(),
+    ];
+}
+
+private function hasColumn(string $table, string $column): bool
+{
+    static $cache = [];
+    $key = $table.'.'.$column;
+
+    if (!array_key_exists($key, $cache)) {
+        $cache[$key] = Schema::hasTable($table) && Schema::hasColumn($table, $column);
+    }
+
+    return $cache[$key];
+}
+
+private function orderStatusesForRevenue(): array
+{
+    return [
+        'processing',
+        'packed',
+        'dispatched',
+        'shipped',
+        'ready_for_collection',
+        'delivered',
+        'completed',
+    ];
+}
+
+private function percentChange(float $current, float $previous): ?float
+{
+    if ($previous == 0.0) {
+        return null;
+    }
+
+    return (($current - $previous) / $previous) * 100;
+}
+
+private function orderSum(Carbon $from, Carbon $to, string $column, ?array $statuses = null): float
+{
+    if (!$this->hasColumn('Orders_Placed_T', $column)) {
+        return 0.0;
+    }
+
+    $query = DB::table('Orders_Placed_T')->whereBetween('created_at', [$from, $to]);
+
+    if ($statuses) {
+        $query->whereIn('Status', $statuses);
+    }
+
+    return (float) $query->sum($column);
+}
+
+public function operationsSummary(Request $request)
+{
+    [$from, $to, $range] = $this->dashboardRange($request);
+    [$previousFrom, $previousTo] = $this->previousRange($from, $to);
+    $salesStatuses = $this->orderStatusesForRevenue();
+
+    $ordersBase = DB::table('Orders_Placed_T')->whereBetween('created_at', [$from, $to]);
+    $previousOrdersBase = DB::table('Orders_Placed_T')->whereBetween('created_at', [$previousFrom, $previousTo]);
+
+    $revenue = (float) (clone $ordersBase)->whereIn('Status', $salesStatuses)->sum('Total_Price');
+    $previousRevenue = (float) (clone $previousOrdersBase)->whereIn('Status', $salesStatuses)->sum('Total_Price');
+
+    $orders = (int) (clone $ordersBase)->count();
+    $previousOrders = (int) (clone $previousOrdersBase)->count();
+
+    $customers = (int) DB::table('Customers_Master_T')
+        ->whereNull('deleted_at')
+        ->whereBetween('created_at', [$from, $to])
+        ->count();
+
+    $previousCustomers = (int) DB::table('Customers_Master_T')
+        ->whereNull('deleted_at')
+        ->whereBetween('created_at', [$previousFrom, $previousTo])
+        ->count();
+
+    $averageOrder = $orders > 0 ? $revenue / $orders : 0.0;
+    $previousAverageOrder = $previousOrders > 0 ? $previousRevenue / $previousOrders : 0.0;
+
+    $shipping = $this->orderSum($from, $to, 'Shipping_Price');
+    $productDiscounts = $this->orderSum($from, $to, 'Product_Discount_Amount');
+    $loyaltyDiscounts = $this->orderSum($from, $to, 'Loyalty_Discount_Amount');
+    $loyaltyPoints = $this->orderSum($from, $to, 'Loyalty_Points_Redeemed');
+    $vat = $this->hasColumn('Orders_Placed_T', 'VAT')
+        ? $this->orderSum($from, $to, 'VAT')
+        : $this->orderSum($from, $to, 'Tax');
+
+    $subtotalColumn = $this->hasColumn('Orders_Placed_T', 'Original_Sub_Total_Price')
+        ? 'Original_Sub_Total_Price'
+        : ($this->hasColumn('Orders_Placed_T', 'Sub_Total_Price') ? 'Sub_Total_Price' : 'Total_Price');
+
+    $subtotal = $this->orderSum($from, $to, $subtotalColumn);
+
+    $statusBreakdown = (clone $ordersBase)
+        ->selectRaw("LOWER(ISNULL(Status, 'unknown')) as label")
+        ->selectRaw('COUNT(*) as total')
+        ->groupBy(DB::raw("LOWER(ISNULL(Status, 'unknown'))"))
+        ->orderByDesc('total')
+        ->get()
+        ->map(fn ($row) => [
+            'label' => $row->label,
+            'total' => (int) $row->total,
+        ]);
+
+    $fulfillmentExpression = $this->hasColumn('Orders_Placed_T', 'Delivery_Type')
+        ? "LOWER(ISNULL(NULLIF(Delivery_Type, ''), CASE WHEN Shippers_Id IS NOT NULL THEN 'ship_to_address' WHEN Location_Id IS NOT NULL THEN 'local_pickup' ELSE 'not_set' END))"
+        : "LOWER(CASE WHEN Shippers_Id IS NOT NULL THEN 'ship_to_address' WHEN Location_Id IS NOT NULL THEN 'local_pickup' ELSE 'not_set' END)";
+
+    $fulfillmentBreakdown = (clone $ordersBase)
+        ->selectRaw("$fulfillmentExpression as label")
+        ->selectRaw('COUNT(*) as total')
+        ->groupBy(DB::raw($fulfillmentExpression))
+        ->orderByDesc('total')
+        ->get()
+        ->map(fn ($row) => [
+            'label' => $row->label,
+            'total' => (int) $row->total,
+        ]);
+
+    $paymentMethods = DB::table('Sales_Transactions_Details_T as d')
+        ->join('Sales_Transaction_Header_T as h', 'h.id', '=', 'd.Sales_Transaction_Header_Id')
+        ->leftJoin('Orders_Placed_T as o', 'o.id', '=', 'h.Orders_Placed_Id')
+        ->whereBetween('d.created_at', [$from, $to])
+        ->selectRaw("LOWER(ISNULL(NULLIF(d.Payment_Method, ''), 'unknown')) as label")
+        ->selectRaw('COUNT(*) as total')
+        ->selectRaw('SUM(ISNULL(d.Payment_Amount, 0)) as amount')
+        ->groupBy(DB::raw("LOWER(ISNULL(NULLIF(d.Payment_Method, ''), 'unknown'))"))
+        ->orderByDesc('amount')
+        ->get()
+        ->map(fn ($row) => [
+            'label' => $row->label,
+            'total' => (int) $row->total,
+            'amount' => (float) $row->amount,
+        ]);
+
+    $paymentStatuses = DB::table('Sales_Transactions_Details_T')
+        ->whereBetween('created_at', [$from, $to])
+        ->selectRaw("LOWER(ISNULL(NULLIF(Payment_Status, ''), 'unknown')) as label")
+        ->selectRaw('COUNT(*) as total')
+        ->selectRaw('SUM(ISNULL(Payment_Amount, 0)) as amount')
+        ->groupBy(DB::raw("LOWER(ISNULL(NULLIF(Payment_Status, ''), 'unknown'))"))
+        ->orderByDesc('amount')
+        ->get()
+        ->map(fn ($row) => [
+            'label' => $row->label,
+            'total' => (int) $row->total,
+            'amount' => (float) $row->amount,
+        ]);
+
+    $topCustomers = DB::table('Orders_Placed_T as o')
+        ->leftJoin('Customers_Master_T as c', 'c.id', '=', 'o.Customers_Id')
+        ->whereBetween('o.created_at', [$from, $to])
+        ->groupBy('o.Customers_Id', 'c.Customer_Full_Name', 'c.Customer_Code')
+        ->selectRaw('o.Customers_Id as customer_id')
+        ->selectRaw("COALESCE(c.Customer_Full_Name, 'Walk-in customer') as customer_name")
+        ->selectRaw('COALESCE(c.Customer_Code, ?) as customer_code', ['-'])
+        ->selectRaw('COUNT(o.id) as total_orders')
+        ->selectRaw('SUM(ISNULL(o.Total_Price, 0)) as total_spent')
+        ->orderByDesc(DB::raw('SUM(ISNULL(o.Total_Price, 0))'))
+        ->limit(8)
+        ->get()
+        ->map(fn ($row) => [
+            'customer_id' => $row->customer_id,
+            'customer_name' => $row->customer_name,
+            'customer_code' => $row->customer_code,
+            'total_orders' => (int) $row->total_orders,
+            'total_spent' => (float) $row->total_spent,
+        ]);
+
+    $vendorSummary = [
+        'orders' => 0,
+        'sales' => 0.0,
+        'commission' => 0.0,
+        'paid_out' => 0.0,
+        'top_vendors' => [],
+    ];
+
+    if (Schema::hasTable('Orders_Placed_Vendors_T')) {
+        $vendorSummary['orders'] = (int) DB::table('Orders_Placed_Vendors_T')
+            ->whereBetween('created_at', [$from, $to])
+            ->count();
+
+        $vendorSummary['sales'] = (float) DB::table('Orders_Placed_Vendors_T')
+            ->whereBetween('created_at', [$from, $to])
+            ->sum('Total');
+
+        $vendorSummary['commission'] = (float) DB::table('Orders_Placed_Vendors_T')
+            ->whereBetween('created_at', [$from, $to])
+            ->sum('Commission_Amount');
+
+        if ($this->hasColumn('Orders_Placed_Vendors_T', 'Payout_Amount')) {
+            $vendorSummary['paid_out'] = (float) DB::table('Orders_Placed_Vendors_T')
+                ->whereBetween('created_at', [$from, $to])
+                ->sum('Payout_Amount');
+        }
+
+        $vendorSummary['top_vendors'] = DB::table('Orders_Placed_Vendors_T as ov')
+            ->leftJoin('Vendors_Master_T as v', 'v.id', '=', 'ov.Vendor_Id')
+            ->whereBetween('ov.created_at', [$from, $to])
+            ->groupBy('ov.Vendor_Id', 'v.Vendor_Name', 'v.Vendor_Code')
+            ->selectRaw('ov.Vendor_Id as vendor_id')
+            ->selectRaw("COALESCE(v.Vendor_Name, 'ISC stock') as vendor_name")
+            ->selectRaw('COALESCE(v.Vendor_Code, ?) as vendor_code', ['-'])
+            ->selectRaw('COUNT(ov.id) as vendor_orders')
+            ->selectRaw('SUM(ISNULL(ov.Total, 0)) as total_sales')
+            ->selectRaw('SUM(ISNULL(ov.Commission_Amount, 0)) as commission')
+            ->orderByDesc(DB::raw('SUM(ISNULL(ov.Total, 0))'))
+            ->limit(8)
+            ->get()
+            ->map(fn ($row) => [
+                'vendor_id' => $row->vendor_id,
+                'vendor_name' => $row->vendor_name,
+                'vendor_code' => $row->vendor_code,
+                'vendor_orders' => (int) $row->vendor_orders,
+                'total_sales' => (float) $row->total_sales,
+                'commission' => (float) $row->commission,
+            ]);
+    }
+
+    return response()->json([
+        'range' => [
+            'key' => $range,
+            'from' => $from->toDateTimeString(),
+            'to' => $to->toDateTimeString(),
+        ],
+        'cards' => [
+            'revenue' => [
+                'value' => $revenue,
+                'previous' => $previousRevenue,
+                'delta' => $this->percentChange($revenue, $previousRevenue),
+            ],
+            'orders' => [
+                'value' => $orders,
+                'previous' => $previousOrders,
+                'delta' => $this->percentChange((float) $orders, (float) $previousOrders),
+            ],
+            'customers' => [
+                'value' => $customers,
+                'previous' => $previousCustomers,
+                'delta' => $this->percentChange((float) $customers, (float) $previousCustomers),
+            ],
+            'average_order' => [
+                'value' => $averageOrder,
+                'previous' => $previousAverageOrder,
+                'delta' => $this->percentChange($averageOrder, $previousAverageOrder),
+            ],
+        ],
+        'financials' => [
+            'subtotal' => $subtotal,
+            'shipping' => $shipping,
+            'vat' => $vat,
+            'product_discounts' => $productDiscounts,
+            'loyalty_discounts' => $loyaltyDiscounts,
+            'loyalty_points' => $loyaltyPoints,
+            'grand_total' => (float) (clone $ordersBase)->sum('Total_Price'),
+        ],
+        'status_breakdown' => $statusBreakdown,
+        'fulfillment_breakdown' => $fulfillmentBreakdown,
+        'payment_methods' => $paymentMethods,
+        'payment_statuses' => $paymentStatuses,
+        'top_customers' => $topCustomers,
+        'vendor_summary' => $vendorSummary,
+    ]);
+}
+
+public function intentInsights(Request $request)
+{
+    [$from, $to, $range] = $this->dashboardRange($request);
+    $cartHasDeletedAt = $this->hasColumn('Customers_Carts_T', 'deleted_at');
+    $favoriteHasDeletedAt = $this->hasColumn('Favorites_Master_T', 'deleted_at');
+
+    $cartActiveExpression = $cartHasDeletedAt
+        ? 'SUM(CASE WHEN c.deleted_at IS NULL THEN 1 ELSE 0 END)'
+        : 'COUNT(*)';
+
+    $cartRemovedExpression = $cartHasDeletedAt
+        ? 'SUM(CASE WHEN c.deleted_at IS NULL THEN 0 ELSE 1 END)'
+        : '0';
+
+    $favoriteActiveExpression = $favoriteHasDeletedAt
+        ? 'SUM(CASE WHEN f.deleted_at IS NULL THEN 1 ELSE 0 END)'
+        : 'COUNT(*)';
+
+    $favoriteRemovedExpression = $favoriteHasDeletedAt
+        ? 'SUM(CASE WHEN f.deleted_at IS NULL THEN 0 ELSE 1 END)'
+        : '0';
+
+    $cartProducts = DB::table('Customers_Carts_T as c')
+        ->leftJoin('Products_Master_T as p', 'p.id', '=', 'c.Products_Id')
+        ->whereBetween('c.created_at', [$from, $to])
+        ->groupBy('c.Products_Id')
+        ->selectRaw('c.Products_Id as product_id')
+        ->selectRaw("COALESCE(MAX(p.Product_Name), CONCAT('Product #', c.Products_Id)) as product_name")
+        ->selectRaw('COALESCE(MAX(p.Product_Code), ?) as product_code', ['-'])
+        ->selectRaw('COUNT(*) as total_events')
+        ->selectRaw('SUM(ISNULL(c.Quantity, 0)) as total_quantity')
+        ->selectRaw("$cartActiveExpression as active_count")
+        ->selectRaw("$cartRemovedExpression as removed_count")
+        ->orderByDesc(DB::raw('COUNT(*)'))
+        ->limit(10)
+        ->get()
+        ->map(fn ($row) => [
+            'product_id' => $row->product_id,
+            'product_name' => $row->product_name,
+            'product_code' => $row->product_code,
+            'total_events' => (int) $row->total_events,
+            'total_quantity' => (int) $row->total_quantity,
+            'active_count' => (int) $row->active_count,
+            'removed_count' => (int) $row->removed_count,
+        ]);
+
+    $favoriteProducts = DB::table('Favorites_Master_T as f')
+        ->leftJoin('Products_Master_T as p', 'p.id', '=', 'f.Products_Id')
+        ->whereBetween('f.created_at', [$from, $to])
+        ->groupBy('f.Products_Id')
+        ->selectRaw('f.Products_Id as product_id')
+        ->selectRaw("COALESCE(MAX(p.Product_Name), CONCAT('Product #', f.Products_Id)) as product_name")
+        ->selectRaw('COALESCE(MAX(p.Product_Code), ?) as product_code', ['-'])
+        ->selectRaw('COUNT(*) as total_events')
+        ->selectRaw("$favoriteActiveExpression as active_count")
+        ->selectRaw("$favoriteRemovedExpression as removed_count")
+        ->orderByDesc(DB::raw('COUNT(*)'))
+        ->limit(10)
+        ->get()
+        ->map(fn ($row) => [
+            'product_id' => $row->product_id,
+            'product_name' => $row->product_name,
+            'product_code' => $row->product_code,
+            'total_events' => (int) $row->total_events,
+            'active_count' => (int) $row->active_count,
+            'removed_count' => (int) $row->removed_count,
+        ]);
+
+    return response()->json([
+        'range' => [
+            'key' => $range,
+            'from' => $from->toDateTimeString(),
+            'to' => $to->toDateTimeString(),
+        ],
+        'cart_products' => $cartProducts,
+        'favorite_products' => $favoriteProducts,
+        'totals' => [
+            'cart_events' => $cartProducts->sum('total_events'),
+            'cart_removed' => $cartProducts->sum('removed_count'),
+            'favorite_events' => $favoriteProducts->sum('total_events'),
+            'favorite_removed' => $favoriteProducts->sum('removed_count'),
+        ],
     ]);
 }
 

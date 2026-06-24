@@ -43,6 +43,11 @@ class OrdersPlaced extends Model
         return $this->hasMany(OrderProcessLog::class, 'Orders_Placed_Id');
     }
 
+    public function vendorOrders()
+    {
+        return $this->hasMany(OrdersPlacedVendors::class, 'Orders_Placed_Id');
+    }
+
 
     public function location(): mixed
     {

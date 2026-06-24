@@ -25,9 +25,10 @@ class StoreShipperShippingRateRequest extends FormRequest
             'Shippers_Destination_Rate_Volume'     => ['required','boolean'],
             'Shippers_Destination_Rate_Weight'     => ['required','boolean'],
             'Shippers_Destination_Rate_Applicable' => ['required','boolean'],
+            'Shippers_Destination_Rate_Box'        => ['nullable','boolean'],
 
             // optional normalized FKs
-            'Shippers_Destination_Country_Id'  => ['nullable','integer','exists:Geox_Country_Master_T,Country_Id'],
+            'Shippers_Destination_Country_Id'  => ['nullable','integer','exists:Geox_Country_Master_T,id'],
             'Shippers_Destination_Region_Id'   => ['nullable','integer','exists:Geox_Region_Master_T,id'],
             'Shippers_Destination_District_Id' => ['nullable','integer','exists:Geox_District_Master_T,id'],
         ];

@@ -22,10 +22,10 @@ class UpdateShipperDestinationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'Shippers_Destination_Country'             => ['sometimes','nullable','string','max:100'],
-            'Shippers_Destination_Region'              => ['sometimes','nullable','string','max:100'],
-            'Shippers_Destination_District'            => ['sometimes','nullable','string','max:100'],
-            'Shippers_Destination_Rate_Applicability'  => ['sometimes','nullable','in:weight,volume,both,special'],
+            'Shippers_Destination_Country_Id'          => ['sometimes','nullable','integer','exists:Geox_Country_Master_T,id'],
+            'Shippers_Destination_Region_Id'           => ['sometimes','nullable','integer','exists:Geox_Region_Master_T,id'],
+            'Shippers_Destination_District_Id'         => ['sometimes','nullable','integer','exists:Geox_District_Master_T,id'],
+            'Shippers_Destination_Rate_Applicability'  => ['sometimes','nullable','string','max:100'],
             'Shippers_Destination_Country_Preference'  => ['sometimes','nullable','string','max:100'],
             'Shippers_Destination_Region_Preference'   => ['sometimes','nullable','string','max:100'],
             'Shippers_Destination_District_Preference' => ['sometimes','nullable','string','max:100'],

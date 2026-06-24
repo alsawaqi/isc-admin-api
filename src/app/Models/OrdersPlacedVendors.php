@@ -27,6 +27,31 @@ class OrdersPlacedVendors extends Model
         'Payout_Amount',
         'Payout_At',
         'Payout_Reference',
+        'Returned_Quantity',
+        'Refunded_Amount',
+        'Net_Sub_Total',
+        'Adjusted_Commission_Amount',
+        'Net_Payout_Amount',
+        'Payout_Adjustment_Amount',
+    ];
+
+    protected $casts = [
+        'Orders_Placed_Id' => 'integer',
+        'Vendor_Id' => 'integer',
+        'Sub_Total' => 'decimal:3',
+        'VAT' => 'decimal:3',
+        'Shipping' => 'decimal:3',
+        'Total' => 'decimal:3',
+        'Commission_Value' => 'decimal:3',
+        'Commission_Amount' => 'decimal:3',
+        'Payout_Amount' => 'decimal:3',
+        'Returned_Quantity' => 'integer',
+        'Refunded_Amount' => 'decimal:3',
+        'Net_Sub_Total' => 'decimal:3',
+        'Adjusted_Commission_Amount' => 'decimal:3',
+        'Net_Payout_Amount' => 'decimal:3',
+        'Payout_Adjustment_Amount' => 'decimal:3',
+        'Payout_At' => 'datetime',
     ];
 
     public function order()
@@ -37,5 +62,10 @@ class OrdersPlacedVendors extends Model
     public function vendor()
     {
         return $this->belongsTo(VendorMaster::class, 'Vendor_Id');
+    }
+
+    public function adjustments()
+    {
+        return $this->hasMany(OrdersPlacedDetailsAdjustment::class, 'Orders_Placed_Vendor_Id');
     }
 }

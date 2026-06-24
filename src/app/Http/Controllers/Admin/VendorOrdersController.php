@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\OrdersPlacedVendors;
+use App\Models\ConxDatabaseNotification;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use App\Support\Vendors\VendorPayoutRules;
+use InvalidArgumentException;
 
 class VendorOrdersController extends Controller
 {
@@ -229,15 +232,12 @@ class VendorOrdersController extends Controller
         ], 422);
     }
 
-    $subTotal = (float) ($vendorOrder->Sub_Total ?? 0);
-    $commission = (float) ($vendorOrder->Commission_Amount ?? 0);
-
-    $payoutAmount = round($subTotal - $commission, 3);
-
-    if ($payoutAmount < 0) {
+    try {
+        $payoutAmount = VendorPayoutRules::payoutAmount($vendorOrder);
+    } catch (InvalidArgumentException $exception) {
         return response()->json([
             'success' => false,
-            'message' => 'Invalid payout amount (negative). Check subtotal/commission.'
+            'message' => $exception->getMessage()
         ], 422);
     }
 
@@ -267,6 +267,23 @@ class VendorOrdersController extends Controller
     $vendorOrder->Payout_At = $payoutAt->format('Y-m-d H:i:s'); // ✅ SQL Server-safe
     $vendorOrder->Payout_Reference = $validated['reference'] ?? null;
     $vendorOrder->save();
+
+    // Notify the vendor that their payout has been processed (best-effort).
+    try {
+        ConxDatabaseNotification::create([
+            'type'            => 'App\\Notifications\\VendorPayoutPaid',
+            'notifiable_type' => 'App\\Models\\Vendor',
+            'notifiable_id'   => $vendorOrder->Vendor_Id,
+            'data'            => [
+                'title'   => 'Payout processed',
+                'message' => 'Your payout of ' . number_format((float) $payoutAmount, 3)
+                    . ' for order ' . $vendorOrder->Vendor_Order_Code . ' has been processed.',
+                'url'     => '/payouts',
+            ],
+        ]);
+    } catch (\Throwable $e) {
+        report($e);
+    }
 
     return response()->json([
         'success' => true,

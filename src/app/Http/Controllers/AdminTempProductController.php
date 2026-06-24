@@ -9,9 +9,15 @@ use Illuminate\Http\Request;
 // If you want approve → move to master tables, import your real models:
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Helpers\CodeGenerator;
+use App\Models\ProductSpecificationProduct;
+use App\Models\ProductSpecificationDescription;
+use App\Models\ProductSpecificationValue;
 use App\Models\ProductVendorRequest;
+use App\Support\Vendors\VendorApprovalSla;
 
 class AdminTempProductController extends Controller
 {
@@ -32,7 +38,7 @@ class AdminTempProductController extends Controller
 private function approveOne(ProductTemporary $temp): int
 {
     // Make sure images relation is loaded (safe even if already eager-loaded)
-    $temp->loadMissing('images');
+    $temp->loadMissing(['images', 'specs']);
 
     // If already approved, just return existing Approved_Product_Id (if present)
     if ($temp->Submission_Status === 'approved' && $temp->Approved_Product_Id) {
@@ -111,6 +117,15 @@ private function approveOne(ProductTemporary $temp): int
             ]);
         }
 
+        foreach ($temp->specs as $spec) {
+            ProductSpecificationProduct::create([
+                'Product_Id' => $master->id,
+                'Product_Specification_Description_Id' => $spec->Product_Specification_Description_Id,
+                'product_specification_value_id' => $spec->product_specification_value_id,
+                'Created_By' => Auth::id(),
+            ]);
+        }
+
         // 5) Update temp status
         $temp->update([
             'Submission_Status'   => 'approved',
@@ -126,6 +141,7 @@ private function approveOne(ProductTemporary $temp): int
             'Products_Id'           => $master->id,
             'Vendor_Id'             => $temp->Vendor_Id,
 
+            'Request_Type' => 'new_product',
             'Status'  => 'approved',
             'Comment' => null,
 
@@ -194,7 +210,14 @@ private function approveOne(ProductTemporary $temp): int
             ->orderBy($sortBy, $sortDir);
 
         // returns: data, total, from, to, last_page... (same style you use)
-        return response()->json($q->paginate($perPage));
+        $page = $q->paginate($perPage);
+        $page->getCollection()->transform(function (ProductTemporary $product) {
+            $product->setAttribute('approval_sla', VendorApprovalSla::forProduct($product));
+
+            return $product;
+        });
+
+        return response()->json($page);
     }
 
     /**
@@ -236,7 +259,7 @@ private function approveOne(ProductTemporary $temp): int
     { 
 
         
-        $product = ProductTemporary::query()
+        $product = ProductTemporary::withTrashed()
         ->with([
             'vendor',
             'images',
@@ -256,6 +279,8 @@ private function approveOne(ProductTemporary $temp): int
         ])
         ->findOrFail($tempId);
     
+
+        $product->setAttribute('approval_sla', VendorApprovalSla::forProduct($product));
 
         return response()->json(['data' => $product]);
     }
@@ -286,6 +311,7 @@ private function approveOne(ProductTemporary $temp): int
                 'Products_Id'           => $product->Approved_Product_Id ?? null, // usually null here
                 'Vendor_Id'             => $product->Vendor_Id,
 
+                'Request_Type' => 'new_product',
                 'Status'  => 'rejected',
                 'Comment' => $data['reason'],
 
@@ -356,7 +382,8 @@ private function approveOne(ProductTemporary $temp): int
                 'Products_Temporary_Id' => $product->id,
                 'Products_Id'           => $product->Approved_Product_Id ?? null,
                 'Vendor_Id'             => $product->Vendor_Id,
-    
+
+                'Request_Type' => 'new_product',
                 'Status'  => 'changes_requested',
                 'Comment' => $data['note'],
     
@@ -441,6 +468,7 @@ private function approveOne(ProductTemporary $temp): int
                     'Products_Id'           => $product->Approved_Product_Id ?? null,
                     'Vendor_Id'             => $product->Vendor_Id,
 
+                    'Request_Type' => 'new_product',
                     'Status'  => 'rejected',
                     'Comment' => $data['reason'],
 
@@ -452,6 +480,440 @@ private function approveOne(ProductTemporary $temp): int
         });
 
         return response()->json(['message' => 'Bulk reject finished.']);
+    }
+
+    public function approvedUpdateRequests(Request $request)
+    {
+        $perPage = (int) $request->get('per_page', 10);
+        $search = trim((string) $request->get('search', ''));
+        $status = (string) $request->get('status', 'open');
+
+        if (! $this->productUpdateRequestColumnsReady()) {
+            return response()->json([
+                'data' => [],
+                'current_page' => 1,
+                'from' => null,
+                'to' => null,
+                'last_page' => 1,
+                'per_page' => $perPage,
+                'total' => 0,
+                'message' => 'Vendor product update request columns are not migrated yet.',
+            ]);
+        }
+
+        $q = ProductVendorRequest::query()
+            ->with([
+                'vendor:id,Vendor_Code,Vendor_Name,Trade_Name',
+                'masterProduct:id,Product_Code,Product_Name,Product_Price,Product_Stock,Weight_Kg,Length_Cm,Width_Cm,Height_Cm,Volume_Cbm',
+            ])
+            ->where('Request_Type', 'approved_update')
+            ->whereNotNull('Products_Id')
+            ->when($status === 'open', function ($qq) {
+                $qq->whereIn('Status', ['pending', 'requested', 'under_review', 'needs_changes']);
+            })
+            ->when($status !== 'open' && $status !== 'all', function ($qq) use ($status) {
+                $qq->where('Status', $status);
+            })
+            ->when($search !== '', function ($qq) use ($search) {
+                $qq->where(function ($w) use ($search) {
+                    $w->where('Comment', 'like', "%{$search}%")
+                        ->orWhereHas('vendor', function ($v) use ($search) {
+                            $v->where('Vendor_Name', 'like', "%{$search}%")
+                                ->orWhere('Vendor_Code', 'like', "%{$search}%");
+                        })
+                        ->orWhereHas('masterProduct', function ($p) use ($search) {
+                            $p->where('Product_Name', 'like', "%{$search}%")
+                                ->orWhere('Product_Code', 'like', "%{$search}%");
+                        });
+                });
+            })
+            ->orderByDesc('Action_At')
+            ->orderByDesc('id');
+
+        $page = $q->paginate($perPage);
+        $page->getCollection()->transform(function ($row) {
+            $changes = $row->Requested_Changes_Json ?? [];
+            $row->Requested_Specifications_Display = is_array($changes) && !empty($changes['specifications'])
+                ? $this->describeSpecificationChanges((array) $changes['specifications'])
+                : [];
+
+            return $row;
+        });
+
+        return response()->json($page);
+    }
+
+    public function showApprovedUpdateRequest(int $requestId)
+    {
+        if (! $this->productUpdateRequestColumnsReady()) {
+            return response()->json([
+                'message' => 'Vendor product update request columns are not migrated yet.',
+            ], 409);
+        }
+
+        $row = ProductVendorRequest::query()
+            ->with([
+                'vendor:id,Vendor_Code,Vendor_Name,Trade_Name',
+                'masterProduct',
+            ])
+            ->where('Request_Type', 'approved_update')
+            ->whereNotNull('Products_Id')
+            ->findOrFail($requestId);
+
+        $changes = is_array($row->Requested_Changes_Json)
+            ? $row->Requested_Changes_Json
+            : [];
+
+        $product = $row->masterProduct;
+
+        $row->Requested_Change_Details = $this->describeApprovedUpdateFieldChanges($changes, $product);
+        $row->Requested_Specifications_Display = !empty($changes['specifications'])
+            ? $this->describeSpecificationChanges((array) $changes['specifications'], $product?->id)
+            : [];
+        $row->Image_Update_Summary = $this->describeImageUpdateSummary(
+            (array) ($changes['image_updates'] ?? []),
+            $product?->id
+        );
+
+        return response()->json(['data' => $row]);
+    }
+
+    public function approveProductUpdate(Request $request, int $requestId)
+    {
+        if (! $this->productUpdateRequestColumnsReady()) {
+            return response()->json([
+                'message' => 'Vendor product update request columns are not migrated yet.',
+            ], 409);
+        }
+
+        $data = $request->validate([
+            'note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $allowed = [
+            'Product_Department_Id',
+            'Product_Sub_Department_Id',
+            'Product_Sub_Sub_Department_Id',
+            'Product_Type_Id',
+            'Product_Brand_Id',
+            'Product_Manufacture_Id',
+            'Product_Name',
+            'Product_Name_Ar',
+            'Product_Description',
+            'Product_Price',
+            'Product_Cost',
+            'Product_Stock',
+            'Weight_Kg',
+            'Length_Cm',
+            'Width_Cm',
+            'Height_Cm',
+            'Volume_Cbm',
+            'volume_type',
+        ];
+
+        $row = ProductVendorRequest::query()
+            ->where('Request_Type', 'approved_update')
+            ->whereIn('Status', ['pending', 'requested', 'under_review', 'needs_changes'])
+            ->findOrFail($requestId);
+
+        $payload = $row->Requested_Changes_Json ?? [];
+        $changes = collect($payload)
+            ->only($allowed)
+            ->filter(fn ($value, $key) => Schema::hasColumn('Products_Master_T', $key))
+            ->all();
+
+        $specChanges = (array) ($payload['specifications'] ?? []);
+        $imageUpdates = (array) ($payload['image_updates'] ?? []);
+
+        if (empty($changes) && empty($specChanges) && empty($imageUpdates)) {
+            return response()->json(['message' => 'No approved update changes were supplied.'], 422);
+        }
+
+        DB::transaction(function () use ($row, $changes, $specChanges, $imageUpdates, $data) {
+            $product = ProductMaster::query()
+                ->where('id', $row->Products_Id)
+                ->where('Vendor_Id', $row->Vendor_Id)
+                ->firstOrFail();
+
+            if (!empty($changes)) {
+                $product->update($changes);
+            }
+
+            if (!empty($specChanges)) {
+                $this->syncProductSpecifications($product, $specChanges);
+            }
+
+            if (!empty($imageUpdates)) {
+                $this->applyProductImageUpdates($product, $imageUpdates);
+            }
+
+            $row->update([
+                'Status' => 'approved',
+                'Comment' => $data['note'] ?? $row->Comment,
+                'Action_By_User_Id' => Auth::id(),
+                'Action_By_Role' => 'admin',
+                'Action_At' => now(),
+            ]);
+        });
+
+        return response()->json(['message' => 'Vendor product update approved and applied.']);
+    }
+
+    private function applyProductImageUpdates(ProductMaster $product, array $imageUpdates): void
+    {
+        $removeImageIds = collect($imageUpdates['remove_image_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($removeImageIds->isNotEmpty()) {
+            $images = ProductImages::query()
+                ->where('Products_Id', $product->id)
+                ->whereIn('id', $removeImageIds)
+                ->get();
+
+            foreach ($images as $image) {
+                if ($image->Image_Path) {
+                    Storage::disk('r2')->delete($image->Image_Path);
+                }
+
+                $image->delete();
+            }
+        }
+
+        foreach ((array) ($imageUpdates['new_images'] ?? []) as $image) {
+            if (empty($image['Image_Path'])) {
+                continue;
+            }
+
+            ProductImages::create([
+                'Product_Image_Code' => CodeGenerator::createCode('PIMG', 'Products_Images_T', 'Product_Image_Code'),
+                'Products_Id' => $product->id,
+                'Image_Path' => $image['Image_Path'],
+                'Image_Size' => $image['Image_Size'] ?? null,
+                'Image_Extension' => $image['Image_Extension'] ?? null,
+                'Image_Type' => $image['Image_Type'] ?? null,
+                'Created_By' => Auth::id(),
+                'Created_Date' => now(),
+            ]);
+        }
+    }
+
+    public function rejectProductUpdate(Request $request, int $requestId)
+    {
+        if (! $this->productUpdateRequestColumnsReady()) {
+            return response()->json([
+                'message' => 'Vendor product update request columns are not migrated yet.',
+            ], 409);
+        }
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:2000'],
+        ]);
+
+        $row = ProductVendorRequest::query()
+            ->where('Request_Type', 'approved_update')
+            ->whereIn('Status', ['pending', 'requested', 'under_review', 'needs_changes'])
+            ->findOrFail($requestId);
+
+        $row->update([
+            'Status' => 'rejected',
+            'Comment' => $data['reason'],
+            'Action_By_User_Id' => Auth::id(),
+            'Action_By_Role' => 'admin',
+            'Action_At' => now(),
+        ]);
+
+        return response()->json(['message' => 'Vendor product update rejected.']);
+    }
+
+    private function productUpdateRequestColumnsReady(): bool
+    {
+        return Schema::hasColumn('Products_Vendor_Requests_T', 'Request_Type')
+            && Schema::hasColumn('Products_Vendor_Requests_T', 'Requested_Changes_Json');
+    }
+
+    private function describeApprovedUpdateFieldChanges(array $changes, ?ProductMaster $product): array
+    {
+        $labels = $this->approvedUpdateFieldLabels();
+
+        return collect($changes)
+            ->reject(fn ($value, $key) => in_array($key, ['specifications', 'image_updates'], true))
+            ->map(function ($requestedValue, $key) use ($labels, $product) {
+                $currentValue = $product ? data_get($product->getAttributes(), $key) : null;
+
+                return [
+                    'key' => $key,
+                    'label' => $labels[$key] ?? Str::headline((string) $key),
+                    'current_value' => $currentValue,
+                    'requested_value' => $requestedValue,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function approvedUpdateFieldLabels(): array
+    {
+        return [
+            'Product_Department_Id' => 'Department',
+            'Product_Sub_Department_Id' => 'Sub Department',
+            'Product_Sub_Sub_Department_Id' => 'Sub-Sub Department',
+            'Product_Type_Id' => 'Type',
+            'Product_Brand_Id' => 'Brand',
+            'Product_Manufacture_Id' => 'Manufacture',
+            'Product_Name' => 'Product Name',
+            'Product_Name_Ar' => 'Arabic Product Name',
+            'Product_Description' => 'Description',
+            'Product_Price' => 'Price',
+            'Product_Cost' => 'Cost',
+            'Product_Stock' => 'Stock',
+            'Weight_Kg' => 'Weight',
+            'Length_Cm' => 'Length',
+            'Width_Cm' => 'Width',
+            'Height_Cm' => 'Height',
+            'Volume_Cbm' => 'Volume',
+            'volume_type' => 'Dimension Unit',
+        ];
+    }
+
+    private function describeImageUpdateSummary(array $imageUpdates, ?int $productId = null): array
+    {
+        $newImages = collect($imageUpdates['new_images'] ?? [])
+            ->filter(fn ($image) => is_array($image))
+            ->values();
+
+        $removeImageIds = collect($imageUpdates['remove_image_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        $removedImages = collect();
+        if ($productId && $removeImageIds->isNotEmpty()) {
+            $removedImages = ProductImages::query()
+                ->where('Products_Id', $productId)
+                ->whereIn('id', $removeImageIds)
+                ->get(['id', 'Image_Path', 'Image_Type', 'Image_Size', 'Image_Extension'])
+                ->values();
+        }
+
+        return [
+            'added_count' => $newImages->count(),
+            'removed_count' => $removeImageIds->count(),
+            'new_images' => $newImages->all(),
+            'remove_image_ids' => $removeImageIds->all(),
+            'removed_images' => $removedImages->all(),
+        ];
+    }
+
+    private function syncProductSpecifications(ProductMaster $product, array $specs): void
+    {
+        $normalized = $this->validateSpecificationChanges(
+            $specs,
+            (int) $product->Product_Sub_Sub_Department_Id
+        );
+
+        foreach ($normalized as $spec) {
+            ProductSpecificationProduct::updateOrCreate(
+                [
+                    'Product_Id' => $product->id,
+                    'Product_Specification_Description_Id' => $spec['description_id'],
+                ],
+                [
+                    'product_specification_value_id' => $spec['value_id'],
+                    'Created_By' => Auth::id(),
+                ]
+            );
+        }
+    }
+
+    private function validateSpecificationChanges(array $specs, int $subSubDeptId): array
+    {
+        if (empty($specs)) {
+            return [];
+        }
+
+        $allowedDescIds = ProductSpecificationDescription::query()
+            ->where('product_sub_sub_department_id', $subSubDeptId)
+            ->pluck('id')
+            ->all();
+
+        $allowedDescSet = array_flip($allowedDescIds);
+        $validated = [];
+
+        foreach ($specs as $i => $spec) {
+            $descId = (int) ($spec['description_id'] ?? $spec['product_specification_description_id'] ?? 0);
+            $valueId = (int) ($spec['value_id'] ?? $spec['product_specification_value_id'] ?? 0);
+
+            if (!$descId || !$valueId) {
+                abort(422, "Invalid specification update at index {$i}.");
+            }
+
+            if (!isset($allowedDescSet[$descId])) {
+                abort(422, "Specification description {$descId} does not belong to this product category.");
+            }
+
+            $valueOk = ProductSpecificationValue::query()
+                ->where('id', $valueId)
+                ->where('product_specification_description_id', $descId)
+                ->exists();
+
+            if (!$valueOk) {
+                abort(422, "Specification value {$valueId} is not valid for description {$descId}.");
+            }
+
+            $validated[$descId] = [
+                'description_id' => $descId,
+                'value_id' => $valueId,
+            ];
+        }
+
+        return array_values($validated);
+    }
+
+    private function describeSpecificationChanges(array $specs, ?int $productId = null): array
+    {
+        $descIds = collect($specs)->map(fn ($s) => (int) ($s['description_id'] ?? $s['product_specification_description_id'] ?? 0))->filter()->unique()->values();
+        $valueIds = collect($specs)->map(fn ($s) => (int) ($s['value_id'] ?? $s['product_specification_value_id'] ?? 0))->filter()->unique()->values();
+
+        $descriptions = $descIds->isEmpty()
+            ? collect()
+            : ProductSpecificationDescription::query()
+                ->whereIn('id', $descIds)
+                ->pluck('Product_Specification_Description_Name', 'id');
+
+        $values = $valueIds->isEmpty()
+            ? collect()
+            : ProductSpecificationValue::query()
+                ->whereIn('id', $valueIds)
+                ->pluck('value', 'id');
+
+        $currentSpecs = collect();
+        if ($productId && $descIds->isNotEmpty()) {
+            $currentSpecs = ProductSpecificationProduct::query()
+                ->with('value:id,value')
+                ->where('Product_Id', $productId)
+                ->whereIn('Product_Specification_Description_Id', $descIds)
+                ->get()
+                ->keyBy('Product_Specification_Description_Id');
+        }
+
+        return collect($specs)->map(function ($spec) use ($descriptions, $values, $currentSpecs) {
+            $descId = (int) ($spec['description_id'] ?? $spec['product_specification_description_id'] ?? 0);
+            $valueId = (int) ($spec['value_id'] ?? $spec['product_specification_value_id'] ?? 0);
+            $current = $currentSpecs->get($descId);
+
+            return [
+                'description_id' => $descId,
+                'value_id' => $valueId,
+                'description' => $descriptions[$descId] ?? "Spec #{$descId}",
+                'value' => $values[$valueId] ?? "Value #{$valueId}",
+                'current_value_id' => $current?->product_specification_value_id,
+                'current_value' => $current?->value?->value,
+            ];
+        })->values()->all();
     }
 
 }

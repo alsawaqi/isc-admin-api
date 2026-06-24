@@ -354,7 +354,7 @@ class ShipperController extends Controller
                 $L = isset($b['Length_cm']) ? (float)$b['Length_cm'] : 0.0;
                 $W = isset($b['Width_cm'])  ? (float)$b['Width_cm']  : 0.0;
                 $H = isset($b['Height_cm']) ? (float)$b['Height_cm'] : 0.0;
-                $volCbm = ($L > 0 && $W > 0 && $H > 0) ? ($L * $W * $H) / 1_000_000 : null;
+                $volCbm = $this->boxVolumeCbmFromCentimeters($L, $W, $H);
 
                 $size = ShipperBoxSize::updateOrCreate(
                     ['Shippers_Id' => $shipper->id, 'Shippers_Box_Code' => $code],
@@ -363,7 +363,7 @@ class ShipperController extends Controller
                         'Shippers_Box_Length_Cm'     => $L,
                         'Shippers_Box_Width_Cm'      => $W,
                         'Shippers_Box_Height_Cm'     => $H,
-                        'Shispers_Box_Max_Weight_Kg' => isset($b['Max_Weight_Kg']) ? (float)$b['Max_Weight_Kg'] : null,
+                        'Shippers_Box_Max_Weight_Kg' => isset($b['Max_Weight_Kg']) ? (float)$b['Max_Weight_Kg'] : null,
                         'Shippers_Box_Volume_Cbm'    => $volCbm,
                         'Shippers_Box_Notes'         => $b['Notes'] ?? null,
                         'Shippers_Box_Is_Active'     => true,
@@ -692,17 +692,24 @@ foreach ($destPayload['volume_bands'] ?? [] as $vb) {
 
         foreach ($payload['standard_boxes'] ?? [] as $b) {
             // Use existing code if provided, otherwise generate a new one
-            $code = $b['Shippers_Box_Code']
+            $code = $b['Box_Code'] ?? $b['Shippers_Box_Code']
                 ?? CodeGenerator::createCode('BOX', 'Shipper_Box_Sizes_T', 'Shippers_Box_Code');
 
+            $L = isset($b['Length_cm']) ? (float)$b['Length_cm'] : null;
+            $W = isset($b['Width_cm']) ? (float)$b['Width_cm'] : null;
+            $H = isset($b['Height_cm']) ? (float)$b['Height_cm'] : null;
+            $volCbm = $this->boxVolumeCbmFromCentimeters($L, $W, $H);
+
             $data = [
-                'Shippers_Box_Code' => $code,
-                'Box_Label'         => $b['Box_Label']         ?? null,
-                'Length_cm'         => $b['Length_cm']         ?? null,
-                'Width_cm'          => $b['Width_cm']          ?? null,
-                'Height_cm'         => $b['Height_cm']         ?? null,
-                'Max_Weight_Kg'     => $b['Max_Weight_Kg']     ?? null,
-                'Notes'             => $b['Notes']             ?? null,
+                'Shippers_Box_Code'          => $code,
+                'Shippers_Box_Label'         => $b['Box_Label'] ?? $b['Shippers_Box_Label'] ?? null,
+                'Shippers_Box_Length_Cm'     => $L,
+                'Shippers_Box_Width_Cm'      => $W,
+                'Shippers_Box_Height_Cm'     => $H,
+                'Shippers_Box_Max_Weight_Kg' => $b['Max_Weight_Kg'] ?? $b['Shippers_Box_Max_Weight_Kg'] ?? null,
+                'Shippers_Box_Volume_Cbm'    => $volCbm,
+                'Shippers_Box_Notes'         => $b['Notes'] ?? $b['Shippers_Box_Notes'] ?? null,
+                'Shippers_Box_Is_Active'     => true,
             ];
 
             if ($existing->has($code)) {
@@ -740,5 +747,27 @@ foreach ($destPayload['volume_bands'] ?? [] as $vb) {
         $shipper->Shippers_Is_Active = ! $shipper->Shippers_Is_Active;
         $shipper->save();
         return new ShipperResource($shipper->loadCount('contacts'));
+    }
+
+    public function boxes(Shipper $shipper): JsonResponse
+    {
+        return response()->json(
+            $shipper->standardBoxes()
+                ->orderBy('Shippers_Box_Volume_Cbm')
+                ->get()
+        );
+    }
+
+    private function boxVolumeCbmFromCentimeters($lengthCm, $widthCm, $heightCm): ?string
+    {
+        $length = (float) $lengthCm;
+        $width = (float) $widthCm;
+        $height = (float) $heightCm;
+
+        if ($length <= 0 || $width <= 0 || $height <= 0) {
+            return null;
+        }
+
+        return number_format(($length * $width * $height) / 1000000, 6, '.', '');
     }
 }

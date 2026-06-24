@@ -28,7 +28,7 @@ protected $guarded = [];
 
     public function value()
     {
-        return $this->belongsTo(ProductSpecificationValue::class, 'Product_Specification_Value_Id');
+        return $this->belongsTo(ProductSpecificationValue::class, 'product_specification_value_id');
     }
 
 

@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\Request;
 use App\Helpers\CodeGenerator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use Laravel\Sanctum\TransientToken;
 
 class UserController extends Controller
 {
@@ -41,11 +43,35 @@ class UserController extends Controller
 
         // Login OK
         $token = $user->createToken('user-token')->plainTextToken;
+        $userPayload = $user->toArray();
+        $userPayload['roles'] = $user->getRoleNames()->values();
+        $userPayload['permissions'] = $user->getAllPermissions()->pluck('name')->values();
 
         return response()->json([
             'message' => 'Login successful',
             'token'   => $token,
-            'user'    => $user,
+            'user'    => $userPayload,
+        ]);
+    }
+
+    public function logout(Request $request)
+    {
+        $user = $request->user();
+        $token = $user?->currentAccessToken();
+
+        if ($token && ! $token instanceof TransientToken) {
+            $token->delete();
+        }
+
+        Auth::guard('web')->logout();
+
+        if ($request->hasSession()) {
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
+
+        return response()->json([
+            'message' => 'Logged out',
         ]);
     }
 

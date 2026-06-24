@@ -2,7 +2,7 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+ 
 use Illuminate\Database\Seeder;
 use App\Models\SecurityPermission;
 
@@ -21,19 +21,23 @@ class SecurityPermissionSeeder extends Seeder
             'sub departments',
             'sub sub departments',
             'addproductsdescription',
+            'view products description',
             'product types',
             'product brands',
             'product manufacture',
             'product master',
             'product activation',
+            'product stock',
             'product reports',
             'orders',
             'orders placed',
             'order packaging',
             'order dispatched',
             'order shipments',
+            'order pickup',
             'order delivery',
             'order verification',
+            'support tickets',
             'invoice',
             'invoice list',
             'invoice preview',
@@ -57,6 +61,8 @@ class SecurityPermissionSeeder extends Seeder
             'geography',
             'country',
             'state',
+            'region',
+            'districts',
             'city',
             'locations',
             'contact departments',
@@ -64,7 +70,18 @@ class SecurityPermissionSeeder extends Seeder
             'customers',
             'shippingservices',
             'create shippers',
-            'view shippers'
+            'view shippers',
+            'vendor services',
+            'vendors',
+            'vendor registration requests',
+            'vendor users',
+            'vendor requests',
+            'vendor orders',
+            'vendor payouts',
+            'view products features',
+            'support tickets',
+           
+           
         ];
 
         

@@ -17,10 +17,11 @@ class ShipperBoxSize extends Model
         'Shippers_Box_Length_Cm',
         'Shippers_Box_Width_Cm',
         'Shippers_Box_Height_Cm',
-        'Shippers_Box_Max_Weight_Kg',
-        'Shippers_Box_Volume_Cbm',
-        'Shippers_Box_Is_Active',
-    ];
+	        'Shippers_Box_Max_Weight_Kg',
+	        'Shippers_Box_Volume_Cbm',
+	        'Shippers_Box_Notes',
+	        'Shippers_Box_Is_Active',
+	    ];
 
     protected $casts = [
         'Shippers_Box_Length_Cm'     => 'decimal:2',

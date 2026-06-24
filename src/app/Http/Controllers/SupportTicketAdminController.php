@@ -9,6 +9,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use App\Models\SupportTicketMessage;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use App\Services\Notifications\CustomerNotificationService;
 
 class SupportTicketAdminController extends Controller
 {
@@ -209,6 +211,15 @@ class SupportTicketAdminController extends Controller
             $ticket->touch();  // updates updated_at
             $ticket->save();
         });
+
+        try {
+            app(CustomerNotificationService::class)->notifyTicketReply($ticket->fresh());
+        } catch (\Throwable $exception) {
+            Log::error('Failed to create customer ticket reply notification', [
+                'ticket_id' => $ticket->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
 
         return response()->json(['message' => 'Reply posted.'], 201);
     }

@@ -14,12 +14,17 @@ use App\Http\Controllers\LocationsController;
 use App\Http\Controllers\LoyalityPointsController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NotificationDeviceController;
+use App\Http\Controllers\AdminCustomerNotificationController;
 use App\Http\Controllers\OrdersPlacedController;
+use App\Http\Controllers\OperationsReportController;
 use App\Http\Controllers\ProductBrandsController;
 use App\Http\Controllers\ProductDepartmentsController;
+use App\Http\Controllers\ProductDiscountController;
+use App\Http\Controllers\ProductEngagementAdminController;
 use App\Http\Controllers\ProductImagesController;
 use App\Http\Controllers\ProductManufactureController;
 use App\Http\Controllers\ProductMasterController;
+use App\Http\Controllers\ProductStockController;
 use App\Http\Controllers\ProductsBarcodesController;
 use App\Http\Controllers\ProductSpecificationDescriptionController;
 use App\Http\Controllers\ProductSpecificationProductController;
@@ -74,15 +79,18 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::delete('/vendor-users/{id}', [VendorUserController::class, 'destroy']);
     Route::post('/vendor-users/{id}/reset-password', [VendorUserController::class, 'resetPassword']);
 
+    // Vendors dropdown (for creating vendor users and filters)
+    Route::get('/vendors/all', [VendorController::class, 'all']);
+
     Route::prefix('vendors')->group(function () {
         Route::get('/', [VendorController::class, 'index']);
         Route::post('/', [VendorController::class, 'store']);
+        Route::get('/{id}', [VendorController::class, 'show']);
+        Route::post('/{id}/documents', [VendorController::class, 'upsertDocuments']);
+        Route::patch('/{id}/approval', [VendorController::class, 'updateApproval']);
         Route::put('/{id}', [VendorController::class, 'update']);
         Route::delete('/{id}', [VendorController::class, 'destroy']);
     });
-
-    // Vendors dropdown (for creating vendor users)
-    Route::get('/vendors/all', [VendorController::class, 'all']);
 
     // Vendor Users CRUD
     Route::get('/vendor-users', [VendorUserController::class, 'index']);
@@ -126,6 +134,8 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::post('/notifications/mark-as-read', 'markAllRead');
     });
 
+    Route::post('/admin/customer-notifications', [AdminCustomerNotificationController::class, 'store']);
+
     Route::controller(ProductBrandsController::class)->group(function () {
         Route::get('/productbrands', 'index');
         Route::get('/productbrands/all', 'index_all');
@@ -156,6 +166,29 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::delete('/productmaster/{productmaster}', 'destroy');
     });
 
+    Route::controller(ProductDiscountController::class)->group(function () {
+        Route::get('/product-discounts', 'index');
+        Route::post('/product-discounts', 'store');
+        Route::put('/product-discounts/{id}', 'update');
+        Route::post('/product-discounts/{id}/toggle', 'toggle');
+        Route::delete('/product-discounts/{id}', 'destroy');
+    });
+
+    Route::controller(ProductEngagementAdminController::class)->group(function () {
+        Route::get('/product-engagement/reviews', 'reviews');
+        Route::post('/product-engagement/reviews/{review}/moderate', 'moderateReview');
+        Route::post('/product-engagement/reviews/{review}/reply', 'replyReview');
+        Route::get('/product-engagement/questions', 'questions');
+        Route::post('/product-engagement/questions/{question}/moderate', 'moderateQuestion');
+        Route::post('/product-engagement/questions/{question}/answer', 'answerQuestion');
+    });
+
+    Route::controller(ProductStockController::class)->group(function () {
+        Route::get('/product-stock/products', 'index');
+        Route::post('/product-stock/products/{id}/adjust', 'adjust');
+        Route::get('/product-stock/products/{id}/movements', 'movements');
+    });
+
     Route::controller(CustomersController::class)->group(function () {
         Route::get('/customers', 'index');
         Route::get('/customers/carts', 'index_carts');
@@ -173,12 +206,18 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
 
     Route::prefix('admin')->group(function () {
+        // Vendor self-registration requests (approve/reject reuses PATCH /vendors/{id}/approval)
+        Route::get('/vendor-registrations', [VendorController::class, 'registrationRequests']);
+        Route::get('/vendor-documents/{id}/url', [VendorController::class, 'documentUrl']);
+
         Route::get('/vendor-orders', [VendorOrdersController::class, 'index']);
         Route::get('/vendor-orders/commissions-set', [VendorOrdersController::class, 'getCommissionsSet']); // <-- move up
         Route::get('/vendor-orders/{id}', [VendorOrdersController::class, 'show']);
 
         Route::post('/vendor-orders/{id}/commission', [VendorOrdersController::class, 'setCommission']);
         Route::post('/vendor-orders/{id}/payout', [VendorOrdersController::class, 'markPayoutPaid']);
+        Route::get('/reports/operations', [OperationsReportController::class, 'index']);
+        Route::get('/reports/operations/export', [OperationsReportController::class, 'export']);
     });
 
     Route::prefix('v1/shipping')->group(function () {
@@ -189,6 +228,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::put('/shippers/{id}', [ShipperController::class, 'update']);
         Route::delete('/shippers/{id}', [ShipperController::class, 'destroy']);
         Route::post('/shippers/{shipper}/toggle', [ShipperController::class, 'toggle']);
+        Route::get('/shippers/{shipper}/boxes', [ShipperController::class, 'boxes']);
 
         // Contacts (nested)
         Route::get('/shippers/{shipper}/contacts', [ShipperContactController::class, 'index']);
@@ -314,13 +354,16 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/orders-placed/packing', 'packing_index');
         Route::get('/orders-placed/dispatch', 'dispatch_index');
         Route::get('/orders-placed/shipment', 'shipment_index');
+        Route::get('/orders-placed/pickup', 'pickup_index');
         Route::get('/orders-placed/delivered', 'delivered_index');
         Route::post('/orders-placed', 'store');
         Route::post('/orders-placed/{id}/pack', 'packing');
         Route::post('/orders-placed/{id}/dispatch', 'dispatch');
         Route::post('/orders-placed/{id}/shipment', 'shipment');
+        Route::post('/orders-placed/{id}/pickup-complete', 'pickupComplete');
         Route::post('/orders-placed/complete/{id}', 'complete');
         Route::post('/orders-placed/{id}/cancel', 'cancel');
+        Route::post('/orders-placed/{id}/return-refund', 'returnRefund');
         Route::get('/orders-placed/{id}/overview', 'overview');
         Route::get('/orders-placed/{id}', 'show');
         Route::put('/orders-placed/{id}', 'update');
@@ -358,6 +401,8 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::get('/dashboard/top-products', [DashboardController::class, 'topProducts']);
 
     Route::get('/dashboard/stock-report', [DashboardController::class, 'stockReport']);
+    Route::get('/dashboard/operations-summary', [DashboardController::class, 'operationsSummary']);
+    Route::get('/dashboard/intent-insights', [DashboardController::class, 'intentInsights']);
 
     Route::controller(ContactDepartmentsController::class)->group(function () {
         Route::get('/contact/departments', 'index');
@@ -409,6 +454,10 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/products-temp/vendors', [AdminTempProductController::class, 'vendors']);
         Route::get('/products-temp/vendors/{vendorId}', [AdminTempProductController::class, 'vendorProducts']);
         Route::get('/products-temp/{tempId}', [AdminTempProductController::class, 'show']);
+        Route::get('/product-update-requests', [AdminTempProductController::class, 'approvedUpdateRequests']);
+        Route::get('/product-update-requests/{requestId}', [AdminTempProductController::class, 'showApprovedUpdateRequest']);
+        Route::post('/product-update-requests/{requestId}/approve', [AdminTempProductController::class, 'approveProductUpdate']);
+        Route::post('/product-update-requests/{requestId}/reject', [AdminTempProductController::class, 'rejectProductUpdate']);
 
         Route::post('/products-temp/{tempId}/review', [AdminTempProductController::class, 'review']);
         Route::post('/products-temp/{tempId}/reject', [AdminTempProductController::class, 'reject']);
@@ -418,7 +467,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::post('/products-temp/bulk/reject', [AdminTempProductController::class, 'bulkReject']);
     });
 
-    Route::post(RoutePath::for('logout', '/logout'), [AuthenticatedSessionController::class, 'destroy']);
+    Route::post(RoutePath::for('logout', '/logout'), [UserController::class, 'logout']);
 });
 
 Route::post('/login', [UserController::class, 'login']);

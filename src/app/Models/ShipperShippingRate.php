@@ -17,12 +17,14 @@ class ShipperShippingRate extends Model
         'Shippers_Destination_Rate_Volume',
         'Shippers_Destination_Rate_Weight',
         'Shippers_Destination_Rate_Applicable',
+        'Shippers_Destination_Rate_Box',
     ];
 
     protected $casts = [
         'Shippers_Destination_Rate_Volume'    => 'boolean',
         'Shippers_Destination_Rate_Weight'    => 'boolean',
         'Shippers_Destination_Rate_Applicable'=> 'boolean',
+        'Shippers_Destination_Rate_Box'       => 'boolean',
     ];
 
     public function shipper()
@@ -38,16 +40,16 @@ class ShipperShippingRate extends Model
     // Optional normalized links (only if you use those FKs)
     public function country()
     {
-        return $this->belongsTo(Country::class, 'Shippers_Destination_Country_Id', 'Country_Id');
+        return $this->belongsTo(Country::class, 'Shippers_Destination_Country_Id', 'id');
     }
 
     public function region()
     {
-        return $this->belongsTo(Region::class, 'Shippers_Destination_Region_Id', 'Region_Id');
+        return $this->belongsTo(Region::class, 'Shippers_Destination_Region_Id', 'id');
     }
 
     public function district()
     {
-        return $this->belongsTo(District::class, 'Shippers_Destination_District_Id', 'District_Id');
+        return $this->belongsTo(District::class, 'Shippers_Destination_District_Id', 'id');
     }
 }

@@ -67,14 +67,14 @@ class ProductDepartmentsController extends Controller
 
     public function store(Request $request)
     {
+        // Validate BEFORE the try so a validation failure returns 422 (the generic
+        // catch below would otherwise swallow ValidationException into a 500).
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'namear' => 'required|string|max:255',
+        ]);
 
        try {
-            // Validate the request
-            $request->validate([
-                'name' => 'required|string|max:255',
-                'namear' => 'required|string|max:255',
-            ]);
-
             $imagePath = null;
             $imageSize = null;
             $imageExtension = null;

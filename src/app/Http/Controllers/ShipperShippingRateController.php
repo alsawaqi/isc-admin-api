@@ -20,11 +20,12 @@ class ShipperShippingRateController extends Controller
                 'Shippers_Destination_Country_Id',
                 'Shippers_Destination_Region_Id',
                 'Shippers_Destination_District_Id',
-                'Shippers_Destination_Rate_Volume',
-                'Shippers_Destination_Rate_Weight',
-                'Shippers_Destination_Rate_Applicable',
-                'created_at'
-            )
+	                'Shippers_Destination_Rate_Volume',
+	                'Shippers_Destination_Rate_Weight',
+	                'Shippers_Destination_Rate_Applicable',
+	                'Shippers_Destination_Rate_Box',
+	                'created_at'
+	            )
             ->orderByDesc('id')
             ->paginate($request->integer('per_page', 20));
     }

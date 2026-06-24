@@ -13,11 +13,21 @@ class ProductVendorRequest extends Model
         'Products_Temporary_Id',
         'Products_Id',
         'Vendor_Id',
+        'Request_Type',
         'Status',
         'Comment',
+        'Requested_Changes_Json',
         'Action_By_User_Id',
         'Action_By_Role',
         'Action_At',
+    ];
+
+    protected $casts = [
+        'Products_Temporary_Id' => 'integer',
+        'Products_Id' => 'integer',
+        'Vendor_Id' => 'integer',
+        'Requested_Changes_Json' => 'array',
+        'Action_At' => 'datetime',
     ];
 
     /*
@@ -34,14 +44,12 @@ class ProductVendorRequest extends Model
 
     public function masterProduct()
     {
-        // Adjust if your master PK is not Products_Id
-        return $this->belongsTo(Product::class, 'Products_Id');
+        return $this->belongsTo(ProductMaster::class, 'Products_Id', 'id');
     }
 
     public function vendor()
     {
-        // Replace Vendor::class & key names with your real model
-        return $this->belongsTo(VendorMaster::class, 'Vendor_Id', 'Vendor_Id');
+        return $this->belongsTo(VendorMaster::class, 'Vendor_Id', 'id');
     }
 
     public function actionByUser()

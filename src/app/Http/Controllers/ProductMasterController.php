@@ -11,6 +11,7 @@ use App\Models\ProductsBarcodes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use App\Models\ProductSpecificationProduct;
 
 class ProductMasterController extends Controller
@@ -22,20 +23,58 @@ class ProductMasterController extends Controller
     {
 
 
-        $search   = $request->query('search');
-        $sortBy   = $request->query('sortBy', 'id');      // default
-        $sortDir  = $request->query('sortDir', 'desc');   // default
+        $search   = trim((string) $request->query('search', ''));
+        $sortBy   = $request->query('sortBy', $request->query('sort_by', 'id'));
+        $sortDir  = strtolower((string) $request->query('sortDir', $request->query('sort_dir', 'desc')));
         $perPage  = (int) $request->query('per_page', 10);
+        $owner    = strtolower((string) $request->query('owner', $request->query('source', 'all')));
 
-        $query = ProductMaster::query();
+        $departmentId = $request->query('product_department_id', $request->query('department_id'));
+        $subDepartmentId = $request->query('product_sub_department_id', $request->query('sub_department_id'));
+        $subSubDepartmentId = $request->query('product_sub_sub_department_id', $request->query('sub_sub_department_id'));
+        $vendorId = $request->query('vendor_id');
+
+        $query = ProductMaster::query()
+            ->with([
+                'department:id,Product_Department_Name,Product_Department_Name_Ar',
+                'subDepartment:id,Sub_Department_Name,Sub_Department_Name_Ar',
+                'subSubDepartment:id,Product_Sub_Sub_Department_Name,Product_Sub_Sub_Department_Name_Ar',
+                'vendor:id,Vendor_Code,Vendor_Name,Trade_Name',
+            ]);
+
+        if ($owner === 'company') {
+            $query->whereNull('Vendor_Id');
+        } elseif ($owner === 'vendor') {
+            $query->whereNotNull('Vendor_Id');
+        }
+
+        if ($departmentId !== null && $departmentId !== '') {
+            $query->where('Product_Department_Id', $departmentId);
+        }
+
+        if ($subDepartmentId !== null && $subDepartmentId !== '') {
+            $query->where('Product_Sub_Department_Id', $subDepartmentId);
+        }
+
+        if ($subSubDepartmentId !== null && $subSubDepartmentId !== '') {
+            $query->where('Product_Sub_Sub_Department_Id', $subSubDepartmentId);
+        }
+
+        if ($vendorId !== null && $vendorId !== '') {
+            $query->where('Vendor_Id', $vendorId);
+        }
 
         //search by name
         if ($search) {
-            $query->where('Product_Name', 'like', "%{$search}%");
+            $query->where(function ($q) use ($search) {
+                $q->where('Product_Name', 'like', "%{$search}%")
+                    ->orWhere('Product_Code', 'like', "%{$search}%")
+                    ->orWhere('Product_Sku', 'like', "%{$search}%");
+            });
         }
 
         // whitelist sortable columns
-        if (!in_array($sortBy, ['id', 'Product_Name', 'created_at'])) {
+        if (!in_array($sortBy, ['id', 'Product_Name', 'Product_Price', 'Product_Stock', 'Status', 'Vendor_Id', 'created_at'])) {
             $sortBy = 'id';
         }
 
@@ -204,10 +243,15 @@ class ProductMasterController extends Controller
 
     public function update(Request $request, ProductMaster $productmaster)
     {
+        $data = $request->except(['id', 'created_at', 'updated_at']);
 
-        $product = ProductMaster::where('id', $productmaster->id)->first();
+        if ($request->hasAny(['Length_Cm', 'Width_Cm', 'Height_Cm'])) {
+            $data = array_merge($data, $this->normalizeShippingDimensions($request, $productmaster));
+        }
 
-        $product->update($request->all());
+        $productmaster->update($data);
+
+        return response()->json($productmaster->fresh());
     }
 
     public function destroy(ProductMaster $productmaster)
@@ -242,5 +286,45 @@ class ProductMasterController extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
+    }
+
+    private function normalizeShippingDimensions(Request $request, ProductMaster $productmaster): array
+    {
+        $unit = strtolower((string) $request->input('volume_type', $productmaster->volume_type ?: 'cm'));
+        $toMeters = [
+            'mm' => 0.001,
+            'cm' => 0.01,
+            'm'  => 1.0,
+            'in' => 0.0254,
+            'ft' => 0.3048,
+        ];
+
+        if (!array_key_exists($unit, $toMeters)) {
+            throw ValidationException::withMessages([
+                'volume_type' => 'Invalid dimension unit. Use mm, cm, m, in, or ft.',
+            ]);
+        }
+
+        $lengthInput = $request->has('Length_Cm')
+            ? (float) $request->input('Length_Cm')
+            : ((float) $productmaster->Length_Cm / $toMeters[$unit]);
+        $widthInput = $request->has('Width_Cm')
+            ? (float) $request->input('Width_Cm')
+            : ((float) $productmaster->Width_Cm / $toMeters[$unit]);
+        $heightInput = $request->has('Height_Cm')
+            ? (float) $request->input('Height_Cm')
+            : ((float) $productmaster->Height_Cm / $toMeters[$unit]);
+
+        $length = round($lengthInput * $toMeters[$unit], 4);
+        $width = round($widthInput * $toMeters[$unit], 4);
+        $height = round($heightInput * $toMeters[$unit], 4);
+
+        return [
+            'volume_type' => $unit,
+            'Length_Cm' => $length,
+            'Width_Cm' => $width,
+            'Height_Cm' => $height,
+            'Volume_Cbm' => round($length * $width * $height, 6),
+        ];
     }
 }

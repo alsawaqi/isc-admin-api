@@ -241,12 +241,12 @@ class ProductSpecificationProductController extends Controller
                     // Upsert one row per (product, description)
                     ProductSpecificationProduct::updateOrCreate(
                         [
-                            'product_id' => $productId,
-                            'product_specification_description_id' => $descId,
-                            'Created_By' => Auth::id(),
+                            'Product_Id' => $productId,
+                            'Product_Specification_Description_Id' => $descId,
                         ],
                         [
                             'product_specification_value_id' => $valueId,
+                            'Created_By' => Auth::id(),
                         ]
                     );
                 }
