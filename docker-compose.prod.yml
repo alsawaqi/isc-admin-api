@@ -11,7 +11,7 @@ services:
       APP_ENV: production
       APP_DEBUG: false
     networks:
-      - npm_network
+      - proxy_network
 
   nginx:
     image: nginx:1.25-alpine
@@ -21,7 +21,7 @@ services:
     depends_on:
       - laravel-app
     networks:
-      - npm_network
+      - proxy_network
 
   composer:
     image: composer:latest
@@ -30,7 +30,7 @@ services:
     working_dir: /var/www/html
     command: composer install --no-dev --optimize-autoloader
     networks:
-      - npm_network
+      - proxy_network
 
   artisan:
     build:
@@ -43,10 +43,10 @@ services:
     depends_on:
       - laravel-app
     networks:
-      - npm_network
+      - proxy_network
 
 networks:
-  npm_network:
+  proxy_network:
     external: true
 
 volumes:
