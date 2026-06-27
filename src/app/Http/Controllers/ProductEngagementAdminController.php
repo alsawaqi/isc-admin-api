@@ -16,7 +16,7 @@ class ProductEngagementAdminController extends Controller
         $query = ProductReview::query()
             ->with([
                 'product:id,Product_Name,Product_Name_Ar,Slug,Vendor_Id',
-                'customer:id,Customer_Full_Name,Company_Name',
+                'customer:id,Customer_Full_Name',
                 'replies' => fn ($q) => $q->oldest(),
             ])
             ->latest();
@@ -66,7 +66,7 @@ class ProductEngagementAdminController extends Controller
         $query = ProductQuestion::query()
             ->with([
                 'product:id,Product_Name,Product_Name_Ar,Slug,Vendor_Id',
-                'customer:id,Customer_Full_Name,Company_Name',
+                'customer:id,Customer_Full_Name',
                 'answers' => fn ($q) => $q->oldest(),
             ])
             ->latest();
