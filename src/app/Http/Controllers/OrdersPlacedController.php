@@ -295,10 +295,10 @@ class OrdersPlacedController extends Controller
         $query->orderBy($sortBy, $sortDir);
 
 
-        if (!empty($status)) {
+        // "View All Orders": a blank (or 'all') status returns every order regardless
+        // of fulfillment stage; a specific status narrows the list to that status only.
+        if (!empty($status) && $status !== 'all') {
             $query->where('Status', $status);
-        } else {
-            $query->whereIn('Status', ['delivered', 'cancelled', 'returned', 'on-hold']);
         }
 
 
