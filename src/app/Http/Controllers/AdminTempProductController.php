@@ -211,12 +211,11 @@ private function approveOne(ProductTemporary $temp): int
 
         // returns: data, total, from, to, last_page... (same style you use)
         $page = $q->paginate($perPage);
-        $page->getCollection()->transform(function (ProductTemporary $product) {
-            $product->setAttribute('approval_sla', VendorApprovalSla::forProduct($product));
 
-            return $product;
-        });
-
+        // Rows here are grouped vendor summaries (DB::table -> stdClass), not
+        // ProductTemporary models, so no per-product transform/SLA applies.
+        // (A transform type-hinted to ProductTemporary here threw a TypeError
+        // -> 500, which silently emptied the admin vendor-requests queue.)
         return response()->json($page);
     }
 
