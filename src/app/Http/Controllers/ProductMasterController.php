@@ -10,9 +10,12 @@ use Sentry\State\HubInterface;
 use App\Models\ProductsBarcodes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use App\Models\ProductBulkPrice;
 use App\Models\ProductSpecificationProduct;
+use App\Support\Pricing\BulkPriceRules;
 
 class ProductMasterController extends Controller
 {
@@ -41,6 +44,15 @@ class ProductMasterController extends Controller
                 'subSubDepartment:id,Product_Sub_Sub_Department_Name,Product_Sub_Sub_Department_Name_Ar',
                 'vendor:id,Vendor_Code,Vendor_Name,Trade_Name',
             ]);
+
+        // Trashed view: ?trashed=1 or ?status=deleted -> soft-deleted products only.
+        // (Default queries auto-exclude trashed rows via the SoftDeletes trait.)
+        $trashed = strtolower((string) $request->query('trashed', ''));
+        $statusFilter = strtolower((string) $request->query('status', ''));
+
+        if (in_array($trashed, ['1', 'true'], true) || $statusFilter === 'deleted') {
+            $query->onlyTrashed();
+        }
 
         if ($owner === 'company') {
             $query->whereNull('Vendor_Id');
@@ -93,8 +105,28 @@ class ProductMasterController extends Controller
         return response()->json(ProductMaster::latest('id')->value('id'));
     }
 
+    /**
+     * 422 message used everywhere the minimum-selling-price floor is enforced.
+     */
+    public static function priceFloorMessage($floor): string
+    {
+        return sprintf(
+            'Price cannot be below the minimum selling price (%s).',
+            number_format((float) $floor, 3, '.', '')
+        );
+    }
+
     public function store(Request $request)
     {
+        // Price floor: minimum selling price is stated first, then the price
+        // must not go below it (Product_Price >= Minimum_Selling_Price).
+        $request->validate([
+            'minimum_selling_price' => ['required', 'numeric', 'min:0'],
+            'price'                 => ['required', 'numeric', 'gte:minimum_selling_price'],
+            'cost'                  => ['nullable', 'numeric', 'min:0'],
+        ], [
+            'price.gte' => self::priceFloorMessage($request->input('minimum_selling_price')),
+        ]);
 
         try {
 
@@ -154,6 +186,8 @@ class ProductMasterController extends Controller
                     'Product_Name_Ar' => $request->name_ar,
                     'Product_Description' => $request->description,
                     'Product_Price' => $request->price,
+                    'Product_Cost' => $request->input('cost') === '' ? null : $request->input('cost'),
+                    'Minimum_Selling_Price' => $request->input('minimum_selling_price'),
                     'Product_Stock' => $request->stock,
                     'Product_Sku' => $request->product_sku,
                     'volume_type' => $request->volume_type,
@@ -237,13 +271,138 @@ class ProductMasterController extends Controller
 
     public function show(ProductMaster $productmaster)
     {
+        // Quantity-tier bulk prices ride along on the detail payload
+        // (ordered by Min_Qty via the relation). Guarded for the deploy
+        // window before the bulk-prices migration has run.
+        if (Schema::hasTable('Products_Bulk_Prices_T')) {
+            $productmaster->load('bulkPrices');
+        }
+
         return response()->json($productmaster);
+    }
+
+    /**
+     * Replace-set the quantity-tier bulk prices on a product.
+     *
+     * POST /api/productmaster/{id}/bulk-prices
+     * Body: {tiers: [{min_qty, max_qty (nullable = "and above"), unit_price}, ...]}
+     * An empty tiers array clears all tiers.
+     *
+     * Smart validation (BulkPriceRules): min_qty >= 1, max_qty >= min_qty,
+     * unit_price > 0, no overlapping ranges, and — when the product has a
+     * non-null Minimum_Selling_Price — every tier price >= that floor (422).
+     */
+    public function setBulkPrices(Request $request, int $id)
+    {
+        if (! Schema::hasTable('Products_Bulk_Prices_T')) {
+            return response()->json([
+                'message' => 'Bulk price table is not migrated yet.',
+            ], 409);
+        }
+
+        $product = ProductMaster::query()->findOrFail($id);
+
+        $data = $request->validate([
+            'tiers'   => ['present', 'array'],
+            'tiers.*' => ['array'],
+        ]);
+
+        $tiers = array_values($data['tiers'] ?? []);
+
+        $floor = $product->Minimum_Selling_Price !== null
+            ? (float) $product->Minimum_Selling_Price
+            : null;
+
+        $errors = BulkPriceRules::validateSet($tiers, $floor);
+
+        if (! empty($errors)) {
+            return response()->json([
+                'message' => $errors[0],
+                'errors'  => ['tiers' => $errors],
+            ], 422);
+        }
+
+        DB::transaction(function () use ($product, $tiers) {
+            // Replace-set semantics: no soft deletes on tiers.
+            ProductBulkPrice::query()->where('Products_Id', $product->id)->delete();
+
+            foreach ($tiers as $tier) {
+                // BulkPriceRules accepts both snake_case and house-cased keys,
+                // so persist with the same dual-casing fallbacks (mirrors
+                // AdminTempProductController::applyBulkPriceChanges).
+                $min   = $tier['min_qty'] ?? $tier['Min_Qty'] ?? null;
+                $max   = $tier['max_qty'] ?? $tier['Max_Qty'] ?? null;
+                $price = $tier['unit_price'] ?? $tier['Unit_Price'] ?? null;
+
+                ProductBulkPrice::create([
+                    'Products_Id' => $product->id,
+                    'Min_Qty'     => (int) $min,
+                    'Max_Qty'     => ($max === null || $max === '') ? null : (int) $max,
+                    'Unit_Price'  => round((float) $price, 3),
+                    'Created_By'  => Auth::id(),
+                ]);
+            }
+        });
+
+        return response()->json([
+            'message' => 'Bulk prices saved.',
+            'data'    => $product->bulkPrices()->get(),
+        ]);
     }
 
 
     public function update(Request $request, ProductMaster $productmaster)
     {
-        $data = $request->except(['id', 'created_at', 'updated_at']);
+        $request->validate([
+            'price'                 => ['nullable', 'numeric'],
+            'cost'                  => ['nullable', 'numeric', 'min:0'],
+            'minimum_selling_price' => ['nullable', 'numeric', 'min:0'],
+            'Product_Price'         => ['nullable', 'numeric'],
+            'Product_Cost'          => ['nullable', 'numeric', 'min:0'],
+            'Minimum_Selling_Price' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        // Is_Active is stripped too: activation is owned by the dedicated
+        // activate/deactivate endpoints, and the edit page PUTs the whole
+        // hydrated row back — a stale Is_Active must not flip the state.
+        // (lowercase variant included: MSSQL columns are case-insensitive)
+        // bulk_prices is stripped for the same reason: show() attaches the
+        // bulkPrices relation (serialized as bulk_prices), the edit page PUTs
+        // the whole hydrated row back, and tiers are owned by the dedicated
+        // POST /productmaster/{id}/bulk-prices endpoint — letting the array
+        // through makes Eloquent try UPDATE ... SET [bulk_prices] = Array.
+        $data = $request->except(['id', 'created_at', 'updated_at', 'deleted_at', 'Is_Active', 'is_active', 'bulk_prices', 'bulkPrices', 'Bulk_Prices']);
+
+        // Accept the admin-UI friendly keys and map them to real columns.
+        $aliases = [
+            'price'                 => 'Product_Price',
+            'cost'                  => 'Product_Cost',
+            'minimum_selling_price' => 'Minimum_Selling_Price',
+        ];
+
+        foreach ($aliases as $alias => $column) {
+            if (array_key_exists($alias, $data)) {
+                $data[$column] = $data[$alias] === '' ? null : $data[$alias];
+                unset($data[$alias]);
+            }
+        }
+
+        // Price floor on the RESULTING pair: any value absent from the payload
+        // falls back to the current DB value.
+        $resultingPrice = array_key_exists('Product_Price', $data)
+            ? $data['Product_Price']
+            : $productmaster->Product_Price;
+        $resultingFloor = array_key_exists('Minimum_Selling_Price', $data)
+            ? $data['Minimum_Selling_Price']
+            : $productmaster->Minimum_Selling_Price;
+
+        if ($resultingPrice !== null && $resultingPrice !== ''
+            && $resultingFloor !== null && $resultingFloor !== ''
+            && (float) $resultingPrice < (float) $resultingFloor) {
+            throw ValidationException::withMessages([
+                'price' => self::priceFloorMessage($resultingFloor),
+            ]);
+        }
 
         if ($request->hasAny(['Length_Cm', 'Width_Cm', 'Height_Cm'])) {
             $data = array_merge($data, $this->normalizeShippingDimensions($request, $productmaster));
@@ -257,35 +416,58 @@ class ProductMasterController extends Controller
     public function destroy(ProductMaster $productmaster)
     {
         try {
+            // Soft delete ONLY the product row. Images, barcodes and
+            // specifications (and the R2 files) are intentionally kept so
+            // restore() brings the product back complete.
+            $productmaster->delete();
 
-            DB::transaction(function () use ($productmaster) {
-                // Step 1: Get all image paths for this product
-                $images = ProductImages::where('product_id', $productmaster->id)->get();
-
-                foreach ($images as $image) {
-                    // Step 2: Delete file from R2 bucket
-                    if ($image->image_path) {
-                        Storage::disk('r2')->delete($image->image_path);
-                    }
-                }
-
-                // Step 3: Delete image DB records
-                ProductImages::where('product_id', $productmaster->id)->delete();
-
-                // Delete barcodes
-                ProductsBarcodes::where('product_id', $productmaster->id)->delete();
-
-                // Delete specifications
-                ProductSpecificationProduct::where('product_id', $productmaster->id)->delete();
-
-                // Finally, delete the product master record
-                $productmaster->delete();
-            });
-
-            return response()->json(['message' => 'Product deleted successfully'], 200);
+            return response()->json(['message' => 'Product moved to Deleted. It can be restored.'], 200);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Restore a soft-deleted product.
+     * Route-model binding excludes trashed rows, so this takes the raw id
+     * and resolves it withTrashed() explicitly.
+     */
+    public function restore(int $id)
+    {
+        $product = ProductMaster::withTrashed()->findOrFail($id);
+
+        if ($product->trashed()) {
+            $product->restore();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Product restored successfully.',
+            'data'    => $product->fresh(),
+        ]);
+    }
+
+    public function activate(ProductMaster $productmaster)
+    {
+        return $this->setActive($productmaster, true);
+    }
+
+    public function deactivate(ProductMaster $productmaster)
+    {
+        return $this->setActive($productmaster, false);
+    }
+
+    private function setActive(ProductMaster $productmaster, bool $active)
+    {
+        $productmaster->update(['Is_Active' => $active ? 1 : 0]);
+
+        return response()->json([
+            'success' => true,
+            'message' => $active
+                ? 'Product activated.'
+                : 'Product deactivated. It is now hidden from the storefront.',
+            'data'    => $productmaster->fresh(),
+        ]);
     }
 
     private function normalizeShippingDimensions(Request $request, ProductMaster $productmaster): array
