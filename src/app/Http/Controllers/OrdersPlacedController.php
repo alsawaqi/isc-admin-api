@@ -18,6 +18,7 @@ use App\Models\SalesTransactionHeader;
 use App\Models\SalesTransactionDetails;
 use App\Services\Orders\OrderReturnRefundService;
 use App\Services\Notifications\CustomerNotificationService;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use App\Models\OrdersPlacedDetailsCancelled;
 use Illuminate\Validation\ValidationException;
@@ -25,7 +26,28 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 
 class OrdersPlacedController extends Controller
 {
-    //
+    /**
+     * Vendors_Master_T columns safe to expose on order responses (staff need
+     * enough contact info to ask the vendor to bring items for packing).
+     * NEVER widen this with Bank_* / payout / approval columns.
+     */
+    private const VENDOR_PUBLIC_COLUMNS = 'id,Vendor_Code,Vendor_Name,Trade_Name,Email_1,Phone_No,Contact_Person_Name,Contact_Person_Title,Contact_Person_Email,Contact_Person_Phone';
+
+    /**
+     * Add a cheap has_vendor_items boolean to a stage-list query: true when the
+     * order has at least one line owned by a vendor (Vendor_Id not null on
+     * Orders_Placed_Details_T). Done as a scalar subquery because withExists()
+     * compiles to `exists(...)` in the select list, which SQL Server rejects.
+     */
+    private function addHasVendorItemsFlag($query)
+    {
+        return $query->addSelect([
+            'has_vendor_items' => DB::table('Orders_Placed_Details_T')
+                ->selectRaw('CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END')
+                ->whereColumn('Orders_Placed_Details_T.Orders_Placed_Id', 'Orders_Placed_T.id')
+                ->whereNotNull('Orders_Placed_Details_T.Vendor_Id'),
+        ])->withCasts(['has_vendor_items' => 'boolean']);
+    }
 
 
     public function index(Request $request)
@@ -59,6 +81,8 @@ class OrdersPlacedController extends Controller
         $query->orderBy($sortBy, $sortDir);
 
         $query->where('Status', 'pending');
+
+        $this->addHasVendorItemsFlag($query);
 
         // return paginator (includes data + links + total + current_page)
         return response()->json(
@@ -131,6 +155,8 @@ class OrdersPlacedController extends Controller
 
         $query->where('Status', 'packed');
 
+        $this->addHasVendorItemsFlag($query);
+
         // return paginator (includes data + links + total + current_page)
         return response()->json(
             $query->paginate($perPage)
@@ -170,6 +196,8 @@ class OrdersPlacedController extends Controller
 
         $query->where('Delivery_Type', 'ship');
         $query->whereIn('Status', ['dispatched', 'processing']);
+
+        $this->addHasVendorItemsFlag($query);
 
         // return paginator (includes data + links + total + current_page)
         return response()->json(
@@ -211,6 +239,8 @@ class OrdersPlacedController extends Controller
         $query->where('Status', 'shipped');
         $query->where('Delivery_Type', 'ship');
 
+        $this->addHasVendorItemsFlag($query);
+
         // return paginator (includes data + links + total + current_page)
         return response()->json(
             $query->paginate($perPage)
@@ -247,6 +277,8 @@ class OrdersPlacedController extends Controller
         $query->where('Delivery_Type', 'pickup');
         $query->where('Status', 'ready_for_collection');
 
+        $this->addHasVendorItemsFlag($query);
+
         // return paginator (includes data + links + total + current_page)
         return response()->json(
             $query->paginate($perPage)
@@ -271,7 +303,8 @@ class OrdersPlacedController extends Controller
             'location',
             'orderlist:id,Orders_Placed_Id,Quantity,Status,Returned_Quantity,Refunded_Amount,Net_Amount,Return_State,Refund_State',
             'transaction.details',
-            'vendorOrders.vendor',
+            // Public contact columns only — never expose Bank_* here.
+            'vendorOrders.vendor:' . self::VENDOR_PUBLIC_COLUMNS,
         ])->withCount('orderlist')
             ->withSum('orderlist as total_quantity', 'Quantity');
 
@@ -301,6 +334,7 @@ class OrdersPlacedController extends Controller
             $query->where('Status', $status);
         }
 
+        $this->addHasVendorItemsFlag($query);
 
 
         // return paginator (includes data + links + total + current_page)
@@ -319,12 +353,50 @@ class OrdersPlacedController extends Controller
             'location',
             'orderlist',
             'orderlist.product',
+            // Item ownership: expose only the vendor's public contact info
+            // (no Bank_* columns) so staff can notify the vendor for packing.
+            'orderlist.product.vendor:' . self::VENDOR_PUBLIC_COLUMNS,
             'vendorOrders',
-            'vendorOrders.vendor',
+            // Public contact columns only — never expose Bank_* here.
+            'vendorOrders.vendor:' . self::VENDOR_PUBLIC_COLUMNS,
             'transaction',
             'transaction.details'
         ])->findOrFail($id);
+
+        // Invoice number lives on Sales_Transaction_Header_T (written at
+        // checkout); alias it so print views don't dig into the relation.
+        // Null-safe: orders without a transaction row get invoice_no = null.
+        $order->setAttribute('invoice_no', optional($order->transaction)->Invoice_No);
+
+        // Admin detail pages render customer_contact.title_name || Designation;
+        // new storefront addresses carry only Title_Id, so resolve the name here.
+        $this->attachContactTitleName($order->customerContact);
+
         return response()->json($order);
+    }
+
+    /**
+     * Attach a null-safe title_name attribute to a customer contact, resolved
+     * from Titles_Master_T via Title_Id (mirrors laravel-api's attachTitleNames).
+     * Guarded: pre-migration (no Title_Id column / no titles table) => null.
+     */
+    private function attachContactTitleName($contact): void
+    {
+        if (! $contact) {
+            return;
+        }
+
+        $titleName = null;
+
+        if (Schema::hasColumn('Customers_Contact_T', 'Title_Id')
+            && Schema::hasTable('Titles_Master_T')
+            && $contact->Title_Id) {
+            $titleName = DB::table('Titles_Master_T')
+                ->where('id', $contact->Title_Id)
+                ->value('Title_Name');
+        }
+
+        $contact->setAttribute('title_name', $titleName);
     }
 
     private function storeOrderSignature(UploadedFile $file, int $orderId): array
@@ -803,12 +875,14 @@ class OrdersPlacedController extends Controller
             'customerContact',
             'shipper',
             'location',
-            'orderlist.product.vendor',
+            // Scoped to public contact columns only — never expose Bank_* here.
+            'orderlist.product.vendor:' . self::VENDOR_PUBLIC_COLUMNS,
             'orderlist.product.department',
             'orderlist.product.subDepartment',
             'orderlist.product.subSubDepartment',
             'orderlist.adjustments',
-            'vendorOrders.vendor',
+            // Public contact columns only — never expose Bank_* here.
+            'vendorOrders.vendor:' . self::VENDOR_PUBLIC_COLUMNS,
             'transaction.details',              // transaction + lines
             'packagingDetails.packedBy:id,User_Name',
             'processLogs.actor:id,User_Name',
@@ -856,6 +930,10 @@ class OrdersPlacedController extends Controller
                 ];
             });
 
+        // Admin detail pages render customer_contact.title_name || Designation;
+        // new storefront addresses carry only Title_Id, so resolve the name here.
+        $this->attachContactTitleName($order->customerContact);
+
         return response()->json([
             'order'             => $order->only([
                 'id',
@@ -879,8 +957,16 @@ class OrdersPlacedController extends Controller
                 'Loyalty_Discount_Amount',
                 'VAT',
                 'Tax',
-                'Total_Price'
+                'Total_Price',
+                // Pickup handover (null pre-migration / for non-pickup orders).
+                'Pickup_Person_Name',
+                'Pickup_Person_Contact',
+                'Pickup_Id_Image_Path',
+                'Picked_Up_At',
+                'Picked_Up_By',
             ]),
+            // Null-safe: orders without a Sales_Transaction_Header_T row => null.
+            'invoice_no'        => optional($order->transaction)->Invoice_No,
             'customer_contact'  => $order->customerContact,
             'shipper'           => $order->shipper,
             'location'          => $order->location,
@@ -939,20 +1025,77 @@ class OrdersPlacedController extends Controller
     }
 
 
-    public function pickupComplete($id)
+    public function pickupComplete(Request $request, $id)
     {
         $order = OrdersPlaced::where('id', $id)
             ->where('Delivery_Type', 'pickup')
             ->firstOrFail();
 
+        // BACKWARD-COMPAT GUARD: the collector-ID gate only applies once the
+        // pickup person columns exist (pre-migration prod keeps old behavior).
+        $captureCollector = Schema::hasColumn('Orders_Placed_T', 'Pickup_Person_Name');
+
+        // IDEMPOTENCY GUARD: a delivered/collected pickup order must not be
+        // re-completed — it would overwrite the persisted collector audit
+        // record, orphan the previous ID image in R2, duplicate the
+        // PICKUP_COLLECTED log, and re-notify the customer.
+        $alreadyCollected = strcasecmp((string) $order->Status, 'delivered') === 0
+            || ($captureCollector && ! empty($order->Pickup_Person_Name));
+
+        if ($alreadyCollected) {
+            return response()->json([
+                'message'  => 'This pickup order has already been collected.',
+                'order_id' => $order->id,
+                'status'   => $order->Status,
+            ], 409);
+        }
+
+        $idImagePath = null;
+
+        if ($captureCollector) {
+            $request->validate([
+                'pickup_person_name'    => ['required', 'string', 'max:255'],
+                'pickup_person_contact' => ['required', 'string', 'max:100'],
+                'id_image'              => ['required', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:10240'],
+            ]);
+
+            // Sensitive PII: store as a PRIVATE R2 object (no 'public'
+            // visibility — same as vendor documents). Viewable only via the
+            // short-lived presigned URL from pickupIdUrl().
+            $idImagePath = Storage::disk('r2')->putFile('PickupIds/' . $order->id, $request->file('id_image'));
+
+            if (! $idImagePath) {
+                return response()->json(['message' => 'The ID image could not be saved.'], 500);
+            }
+        }
+
         $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
 
-        DB::transaction(function () use ($order, $orderplacedetail) {
+        DB::transaction(function () use ($order, $orderplacedetail, $request, $captureCollector, $idImagePath) {
             foreach ($orderplacedetail as $detail) {
                 $detail->update(['Status' => 'delivered']);
             }
 
-            $order->update(['Status' => 'delivered']);
+            $orderUpdate = ['Status' => 'delivered'];
+            $notes       = 'Customer collected pickup order.';
+
+            if ($captureCollector) {
+                $orderUpdate += [
+                    'Pickup_Person_Name'    => $request->input('pickup_person_name'),
+                    'Pickup_Person_Contact' => $request->input('pickup_person_contact'),
+                    'Pickup_Id_Image_Path'  => $idImagePath,
+                    'Picked_Up_At'          => now(),
+                    'Picked_Up_By'          => Auth::id(),
+                ];
+
+                $notes .= sprintf(
+                    ' Collected by: %s (%s)',
+                    $request->input('pickup_person_name'),
+                    $request->input('pickup_person_contact')
+                );
+            }
+
+            $order->update($orderUpdate);
 
             OrderProcessLog::create([
                 'Orders_Placed_Id' => $order->id,
@@ -962,16 +1105,49 @@ class OrdersPlacedController extends Controller
                 'Actor_User_Id'    => Auth::id(),
                 'Actor_Name'       => optional(Auth::user())->User_Name ?? 'System',
                 'Actor_Role'       => optional(Auth::user())->role ?? null,
-                'Notes'            => 'Customer collected pickup order.',
+                'Notes'            => $notes,
             ]);
         });
 
-        $this->notifyCustomerOrderStatus($order->fresh(), 'delivered');
+        $order = $order->fresh();
+
+        $this->notifyCustomerOrderStatus($order, 'delivered');
 
         return response()->json([
-            'message' => 'Pickup order collected.',
+            'message'  => 'Pickup order collected.',
             'order_id' => $order->id,
-            'status' => 'delivered',
+            'status'   => 'delivered',
+            'pickup_person_name'    => $captureCollector ? $order->Pickup_Person_Name : null,
+            'pickup_person_contact' => $captureCollector ? $order->Pickup_Person_Contact : null,
+            'picked_up_at'          => $captureCollector ? $order->Picked_Up_At : null,
+            'picked_up_by'          => $captureCollector ? $order->Picked_Up_By : null,
+        ]);
+    }
+
+
+    /**
+     * Short-lived presigned URL to view the collector's ID image (private R2
+     * object). Mirrors VendorController@documentUrl, but with NO public-url
+     * fallback: ID copies are sensitive PII and must never be exposed via a
+     * permanent public link.
+     */
+    public function pickupIdUrl($id)
+    {
+        $order = OrdersPlaced::findOrFail($id);
+
+        $path = Schema::hasColumn('Orders_Placed_T', 'Pickup_Id_Image_Path')
+            ? $order->Pickup_Id_Image_Path
+            : null;
+
+        if (! $path) {
+            return response()->json(['message' => 'This order has no pickup ID image.'], 404);
+        }
+
+        $url = Storage::disk('r2')->temporaryUrl($path, now()->addMinutes(10));
+
+        return response()->json([
+            'success' => true,
+            'url'     => $url,
         ]);
     }
 

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Schema;
 
 class StoreShipperContactRequest extends FormRequest
 {
@@ -21,23 +22,26 @@ class StoreShipperContactRequest extends FormRequest
      */
     public function rules(): array
     {
+        $titleRule = ['nullable', 'integer'];
+        if (Schema::hasTable('Titles_Master_T')) {
+            $titleRule[] = 'exists:Titles_Master_T,id';
+        }
+
+        $designationRule = ['nullable', 'integer'];
+        if (Schema::hasTable('Designations_Master_T')) {
+            $designationRule[] = 'exists:Designations_Master_T,id';
+        }
+
         return [
-            'Shippers_Code'  => ['required','string','max:50','unique:Shippers_Master_T,Shippers_Code'],
-            'Shippers_Name'  => ['required','string','max:255'],
-            'Shippers_Scope' => ['required','in:local,international'],
-            'Shippers_Type'  => ['required','in:parcel,courier,postal,heavy,slow,other'],
-            'Shippers_Rate_Mode' => ['required','in:weight,volume,both'],
-
-            'Shippers_Email_Address' => ['nullable','email','max:255'],
-            'Shippers_Official_Website_Address' => ['nullable','url','max:255'],
-            'Shippers_Is_Active' => ['boolean'],
-            'Shippers_Meta' => ['nullable','array'],
-
-            // Optional strings
-            'Shippers_Address' => ['nullable','string','max:500'],
-            'Shippers_Office_No' => ['nullable','string','max:50'],
-            'Shippers_GSM_No' => ['nullable','string','max:50'],
-            'Shippers_GPS_Location' => ['nullable','string','max:255'],
+            'Shippers_Contact_Name' => ['required','string','max:255'],
+            'Shippers_Contact_Position' => ['nullable','string','max:255'],
+            'Shippers_Contact_Office_No' => ['nullable','string','max:50'],
+            'Shippers_Contact_GSM_No' => ['nullable','string','max:50'],
+            'Shippers_Contact_Email_Address' => ['nullable','email','max:255'],
+            'Shippers_Is_Primary' => ['boolean'],
+            'Contact_Department_Id' => ['nullable','integer'],
+            'Title_Id' => $titleRule,
+            'Designation_Id' => $designationRule,
         ];
     }
 }

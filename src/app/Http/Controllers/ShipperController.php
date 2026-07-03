@@ -20,6 +20,7 @@ use App\Models\ShipperShippingRate;
 use Illuminate\Support\Facades\Auth;
 use App\Models\ShipperVolumetricRule;
 use App\Http\Resources\ShipperResource;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Requests\StoreShipperRequest;
@@ -183,13 +184,16 @@ class ShipperController extends Controller
             ]);
 
             // ---- 2) Contacts ----
+            $hasContactTitleCol       = Schema::hasColumn('Shipper_Contacts_T', 'Title_Id');
+            $hasContactDesignationCol = Schema::hasColumn('Shipper_Contacts_T', 'Designation_Id');
+
             $contacts = $request->input('contacts', []);
             foreach ($contacts as $c) {
                 // ignore completely empty rows
                 if (!isset($c['Shippers_Contact_Name']) || trim((string)$c['Shippers_Contact_Name']) === '') {
                     continue;
                 }
-                ShipperContact::create([
+                ShipperContact::create(array_merge([
                     'Shippers_Id'                      => $shipper->id,
                     'Contact_Department_Id'            => $c['Contact_Department_Id'] ?? null,
                     'Shippers_Contact_Name'            => $c['Shippers_Contact_Name'],
@@ -198,7 +202,9 @@ class ShipperController extends Controller
                     'Shippers_Contact_GSM_No'          => $c['Shippers_Contact_GSM_No'] ?? null,
                     'Shippers_Contact_Email_Address'   => $c['Shippers_Contact_Email_Address'] ?? null,
                     'Shippers_Is_Primary'              => (bool)($c['Shippers_Is_Primary'] ?? false),
-                ]);
+                ],
+                $hasContactTitleCol ? ['Title_Id' => $c['Title_Id'] ?? null] : [],
+                $hasContactDesignationCol ? ['Designation_Id' => $c['Designation_Id'] ?? null] : []));
             }
             // (b) Optional single quick contact at top-level
             if ($request->filled('Shippers_Contact_Name')) {
@@ -415,6 +421,8 @@ class ShipperController extends Controller
         $shipper = Shipper::with([
             'contacts',
             'contacts.department',
+            'contacts.title',
+            'contacts.designation',
             'destinations',
             'destinations.volumeBands',
             'destinations.weightBands',
@@ -567,6 +575,14 @@ class ShipperController extends Controller
         // 🔹 Sync contacts (simple example: delete + recreate)
         $shipper->contacts()->delete();
         foreach ($payload['contacts'] ?? [] as $c) {
+            // Title/Designation lookups: drop the keys when the columns are
+            // not present yet (shared-DB deploys can lag behind code).
+            if (! Schema::hasColumn('Shipper_Contacts_T', 'Title_Id')) {
+                unset($c['Title_Id']);
+            }
+            if (! Schema::hasColumn('Shipper_Contacts_T', 'Designation_Id')) {
+                unset($c['Designation_Id']);
+            }
             $shipper->contacts()->create($c);
         }
 

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Schema;
 
 class UpdateShipperContactRequest extends FormRequest
 {
@@ -22,6 +23,16 @@ class UpdateShipperContactRequest extends FormRequest
      */
     public function rules(): array
     {
+        $titleRule = ['sometimes','nullable','integer'];
+        if (Schema::hasTable('Titles_Master_T')) {
+            $titleRule[] = 'exists:Titles_Master_T,id';
+        }
+
+        $designationRule = ['sometimes','nullable','integer'];
+        if (Schema::hasTable('Designations_Master_T')) {
+            $designationRule[] = 'exists:Designations_Master_T,id';
+        }
+
         return [
             'Shippers_Contact_Name' => ['sometimes','string','max:255'],
             'Shippers_Contact_Position' => ['sometimes','string','max:255'],
@@ -29,6 +40,8 @@ class UpdateShipperContactRequest extends FormRequest
             'Shippers_Contact_GSM_No' => ['sometimes','string','max:50'],
             'Shippers_Contact_Email_Address' => ['sometimes','email','max:255'],
             'Shippers_Is_Primary' => ['boolean'],
+            'Title_Id' => $titleRule,
+            'Designation_Id' => $designationRule,
         ];
     }
 }

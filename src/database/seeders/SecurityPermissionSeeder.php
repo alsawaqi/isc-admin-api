@@ -66,6 +66,7 @@ class SecurityPermissionSeeder extends Seeder
             'city',
             'locations',
             'contact departments',
+            'titles and designations',
             'customer types',
             'customers',
             'shippingservices',

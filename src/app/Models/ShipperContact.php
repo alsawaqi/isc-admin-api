@@ -11,7 +11,8 @@ class ShipperContact extends Model
     protected $fillable = [
         'Shippers_Id','Contact_Department_Id','Shippers_Contact_Name','Shippers_Contact_Position',
         'Shippers_Contact_Office_No','Shippers_Contact_GSM_No',
-        'Shippers_Contact_Email_Address','Shippers_Is_Primary'
+        'Shippers_Contact_Email_Address','Shippers_Is_Primary',
+        'Title_Id','Designation_Id'
     ];
 
     protected $casts = [
@@ -26,5 +27,15 @@ class ShipperContact extends Model
     public function department()
     {
         return $this->belongsTo(ContactDepartments::class, 'Contact_Department_Id', 'id');
+    }
+
+    public function title()
+    {
+        return $this->belongsTo(Title::class, 'Title_Id', 'id');
+    }
+
+    public function designation()
+    {
+        return $this->belongsTo(Designation::class, 'Designation_Id', 'id');
     }
 }

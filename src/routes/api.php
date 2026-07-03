@@ -41,6 +41,8 @@ use App\Http\Controllers\ShipperVolumeRateController;
 use App\Http\Controllers\ShipperWeightRateController;
 use App\Http\Controllers\StateController;
 use App\Http\Controllers\SupportTicketAdminController;
+use App\Http\Controllers\TitlesController;
+use App\Http\Controllers\DesignationsController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VatController;
 use App\Http\Controllers\VendorController;
@@ -161,6 +163,13 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/productmaster', 'index');
         Route::get('/latest-products', 'getLatestProducts');
         Route::post('/productmaster', 'store');
+        // restore takes the raw {id}: route-model binding excludes trashed rows
+        Route::post('/productmaster/{id}/restore', 'restore')->whereNumber('id');
+        Route::post('/productmaster/{productmaster}/activate', 'activate');
+        Route::post('/productmaster/{productmaster}/deactivate', 'deactivate');
+        // Quantity-tier bulk prices (replace-set). Raw {id} + literal suffix,
+        // registered before the bare {productmaster} wildcards.
+        Route::post('/productmaster/{id}/bulk-prices', 'setBulkPrices')->whereNumber('id');
         Route::get('/productmaster/{productmaster}', 'show');
         Route::put('/productmaster/{productmaster}', 'update');
         Route::delete('/productmaster/{productmaster}', 'destroy');
@@ -168,7 +177,11 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
     Route::controller(ProductDiscountController::class)->group(function () {
         Route::get('/product-discounts', 'index');
+        // Product picker for the bulk-discount builder. Literal path: the
+        // group has no GET wildcard, so this cannot be shadowed.
+        Route::get('/product-discounts/products', 'products');
         Route::post('/product-discounts', 'store');
+        Route::post('/product-discounts/bulk', 'bulk');
         Route::put('/product-discounts/{id}', 'update');
         Route::post('/product-discounts/{id}/toggle', 'toggle');
         Route::delete('/product-discounts/{id}', 'destroy');
@@ -212,9 +225,11 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
         Route::get('/vendor-orders', [VendorOrdersController::class, 'index']);
         Route::get('/vendor-orders/commissions-set', [VendorOrdersController::class, 'getCommissionsSet']); // <-- move up
+        Route::post('/vendor-orders/bulk/confirm-commission', [VendorOrdersController::class, 'bulkConfirmCommission']); // <-- move up (before {id} wildcard)
         Route::get('/vendor-orders/{id}', [VendorOrdersController::class, 'show']);
 
         Route::post('/vendor-orders/{id}/commission', [VendorOrdersController::class, 'setCommission']);
+        Route::post('/vendor-orders/{id}/confirm-commission', [VendorOrdersController::class, 'confirmCommission']);
         Route::post('/vendor-orders/{id}/payout', [VendorOrdersController::class, 'markPayoutPaid']);
         Route::get('/reports/operations', [OperationsReportController::class, 'index']);
         Route::get('/reports/operations/export', [OperationsReportController::class, 'export']);
@@ -365,6 +380,8 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::post('/orders-placed/{id}/cancel', 'cancel');
         Route::post('/orders-placed/{id}/return-refund', 'returnRefund');
         Route::get('/orders-placed/{id}/overview', 'overview');
+        // Presigned (10 min) URL for the collector's ID image — private R2 object.
+        Route::get('/orders-placed/{id}/pickup-id-url', 'pickupIdUrl');
         Route::get('/orders-placed/{id}', 'show');
         Route::put('/orders-placed/{id}', 'update');
         Route::delete('/orders-placed/{id}', 'destroy');
@@ -403,6 +420,24 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::get('/dashboard/stock-report', [DashboardController::class, 'stockReport']);
     Route::get('/dashboard/operations-summary', [DashboardController::class, 'operationsSummary']);
     Route::get('/dashboard/intent-insights', [DashboardController::class, 'intentInsights']);
+
+    Route::controller(TitlesController::class)->group(function () {
+        Route::get('/titles', 'index');
+        Route::get('/titles/all', 'index_all'); // literal path before {title} wildcards
+        Route::post('/titles', 'store');
+        Route::put('/titles/{title}', 'update');
+        Route::post('/titles/{title}/toggle', 'toggle');
+        Route::delete('/titles/{title}', 'destroy');
+    });
+
+    Route::controller(DesignationsController::class)->group(function () {
+        Route::get('/designations', 'index');
+        Route::get('/designations/all', 'index_all'); // literal path before {designation} wildcards
+        Route::post('/designations', 'store');
+        Route::put('/designations/{designation}', 'update');
+        Route::post('/designations/{designation}/toggle', 'toggle');
+        Route::delete('/designations/{designation}', 'destroy');
+    });
 
     Route::controller(ContactDepartmentsController::class)->group(function () {
         Route::get('/contact/departments', 'index');
@@ -455,16 +490,20 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/products-temp/vendors/{vendorId}', [AdminTempProductController::class, 'vendorProducts']);
         Route::get('/products-temp/{tempId}', [AdminTempProductController::class, 'show']);
         Route::get('/product-update-requests', [AdminTempProductController::class, 'approvedUpdateRequests']);
+        Route::post('/product-update-requests/bulk/approve', [AdminTempProductController::class, 'bulkApproveProductUpdates']); // <-- move up (before {requestId} wildcard)
         Route::get('/product-update-requests/{requestId}', [AdminTempProductController::class, 'showApprovedUpdateRequest']);
         Route::post('/product-update-requests/{requestId}/approve', [AdminTempProductController::class, 'approveProductUpdate']);
         Route::post('/product-update-requests/{requestId}/reject', [AdminTempProductController::class, 'rejectProductUpdate']);
+
+        Route::post('/products-temp/bulk/approve', [AdminTempProductController::class, 'bulkApprove']); // <-- move up (before {tempId} wildcard)
+        Route::post('/products-temp/bulk/reject', [AdminTempProductController::class, 'bulkReject']); // <-- move up (before {tempId} wildcard)
 
         Route::post('/products-temp/{tempId}/review', [AdminTempProductController::class, 'review']);
         Route::post('/products-temp/{tempId}/reject', [AdminTempProductController::class, 'reject']);
         Route::post('/products-temp/{tempId}/approve', [AdminTempProductController::class, 'approve']);
 
-        Route::post('/products-temp/bulk/approve', [AdminTempProductController::class, 'bulkApprove']); // ✅ new
-        Route::post('/products-temp/bulk/reject', [AdminTempProductController::class, 'bulkReject']);
+        // Per-product commission on an existing vendor master product (future orders only)
+        Route::post('/vendor-products/{productId}/commission', [AdminTempProductController::class, 'setVendorProductCommission']);
     });
 
     Route::post(RoutePath::for('logout', '/logout'), [UserController::class, 'logout']);

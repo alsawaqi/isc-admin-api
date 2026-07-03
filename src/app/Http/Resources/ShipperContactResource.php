@@ -23,6 +23,10 @@ class ShipperContactResource extends JsonResource
             'Shippers_Contact_GSM_No'        => $this->Shippers_Contact_GSM_No,
             'Shippers_Contact_Email_Address' => $this->Shippers_Contact_Email_Address,
             'Shippers_Is_Primary'            => (bool)$this->Shippers_Is_Primary,
+            'Title_Id'                       => $this->Title_Id,
+            'Designation_Id'                 => $this->Designation_Id,
+            'title_name'                     => $this->title?->Title_Name,
+            'designation_name'               => $this->designation?->Designation_Name,
             'created_at'                     => $this->created_at,
             'updated_at'                     => $this->updated_at,
         ];
