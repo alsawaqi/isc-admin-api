@@ -11,6 +11,7 @@ use App\Models\ProductMaster;
 use App\Models\ProductStockMovement;
 use App\Support\Orders\OrderReturnRefundCalculator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
@@ -247,11 +248,26 @@ class OrderReturnRefundService
                 ->selectRaw('SUM(COALESCE(Refunded_Amount, 0)) as refunded_amount')
                 ->first();
 
+            // For auto-computed commissions, pass the per-line commission
+            // snapshots so the adjusted commission is recomputed exactly
+            // (fixed per-unit x remaining qty, percent x remaining amount)
+            // instead of pro-rata scaled.
+            $detailLines = [];
+            if (strtolower((string) $vendorOrder->Commission_Type) === 'auto'
+                && Schema::hasColumn('Orders_Placed_Details_T', 'Commission_Amount')) {
+                $detailLines = OrdersPlacedDetails::query()
+                    ->where('Orders_Placed_Vendor_Id', $vendorOrder->id)
+                    ->get()
+                    ->map(fn ($line) => $line->getAttributes())
+                    ->all();
+            }
+
             try {
                 $plan = OrderReturnRefundCalculator::vendorPlan(
                     vendorOrder: $vendorOrder->getAttributes(),
                     refundedAmount: (string) ($totals?->refunded_amount ?? 0),
                     returnedQuantity: (int) ($totals?->returned_quantity ?? 0),
+                    lines: $detailLines,
                 );
             } catch (InvalidArgumentException $exception) {
                 throw ValidationException::withMessages([

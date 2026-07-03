@@ -81,6 +81,9 @@ final class OrderReturnRefundCalculator
 
     /**
      * @param array<string, mixed> $vendorOrder
+     * @param list<array<string, mixed>> $lines Detail lines with per-line
+     *        Commission_Type/Commission_Value snapshots (used to recompute
+     *        'auto' commissions exactly; optional for backwards compatibility).
      *
      * @return array<string, mixed>
      */
@@ -88,6 +91,7 @@ final class OrderReturnRefundCalculator
         array $vendorOrder,
         string|int|float $refundedAmount,
         int $returnedQuantity,
+        array $lines = [],
     ): array {
         if ($returnedQuantity < 0) {
             throw new InvalidArgumentException('Returned quantity cannot be negative.');
@@ -101,7 +105,7 @@ final class OrderReturnRefundCalculator
         }
 
         $netSubTotalUnits = $subTotalUnits - $refundedUnits;
-        $commissionUnits = self::adjustedCommissionUnits($vendorOrder, $subTotalUnits, $netSubTotalUnits);
+        $commissionUnits = self::adjustedCommissionUnits($vendorOrder, $subTotalUnits, $netSubTotalUnits, $lines);
         $netPayoutUnits = max($netSubTotalUnits - $commissionUnits, 0);
 
         $originalCommissionUnits = self::moneyToUnits($vendorOrder['Commission_Amount'] ?? 0, 'vendor commission amount');
@@ -146,7 +150,7 @@ final class OrderReturnRefundCalculator
         return 'refund';
     }
 
-    private static function adjustedCommissionUnits(array $vendorOrder, int $subTotalUnits, int $netSubTotalUnits): int
+    private static function adjustedCommissionUnits(array $vendorOrder, int $subTotalUnits, int $netSubTotalUnits, array $lines = []): int
     {
         $commissionType = strtolower((string) ($vendorOrder['Commission_Type'] ?? ''));
         $commissionValue = (float) ($vendorOrder['Commission_Value'] ?? 0);
@@ -160,6 +164,19 @@ final class OrderReturnRefundCalculator
             return min((int) round($netSubTotalUnits * ($commissionValue / 100)), $netSubTotalUnits);
         }
 
+        // 'auto' commissions were rolled up from per-line product commissions at
+        // checkout; recompute exactly from the per-line snapshots when available
+        // (fixed per-unit commissions scale with remaining quantity, percent with
+        // the remaining line amount). Falls through to pro-rata when snapshots
+        // are missing/invalid.
+        if ($commissionType === 'auto') {
+            $recomputedUnits = self::recomputedLineCommissionUnits($lines);
+
+            if ($recomputedUnits !== null) {
+                return min($recomputedUnits, $netSubTotalUnits);
+            }
+        }
+
         if ($subTotalUnits === 0) {
             return 0;
         }
@@ -167,6 +184,54 @@ final class OrderReturnRefundCalculator
         $ratio = $netSubTotalUnits / $subTotalUnits;
 
         return min((int) round($originalCommissionUnits * $ratio), $netSubTotalUnits);
+    }
+
+    /**
+     * Recompute the vendor commission from per-line Commission_Type/Value
+     * snapshots. Returns null when the lines cannot support an exact
+     * recomputation (no lines, or any line missing a valid snapshot), so the
+     * caller can fall back to pro-rata scaling.
+     *
+     * @param list<array<string, mixed>> $lines
+     */
+    private static function recomputedLineCommissionUnits(array $lines): ?int
+    {
+        if ($lines === []) {
+            return null;
+        }
+
+        $totalUnits = 0;
+
+        foreach ($lines as $line) {
+            $type = strtolower((string) ($line['Commission_Type'] ?? ''));
+            $value = (float) ($line['Commission_Value'] ?? 0);
+
+            if ($value <= 0 || ! in_array($type, ['percent', 'fixed'], true)) {
+                return null;
+            }
+
+            $orderedQuantity = max(0, (int) ($line['Quantity'] ?? 0));
+            $returnedQuantity = max(0, (int) ($line['Returned_Quantity'] ?? 0));
+            $remainingQuantity = max($orderedQuantity - $returnedQuantity, 0);
+
+            $soldUnits = self::soldAmountUnits($line, max($orderedQuantity, 1));
+            $refundedUnits = self::moneyToUnits($line['Refunded_Amount'] ?? 0, 'line refunded amount');
+            $netUnits = array_key_exists('Net_Amount', $line) && $line['Net_Amount'] !== null
+                ? self::moneyToUnits($line['Net_Amount'], 'line net amount')
+                : max($soldUnits - $refundedUnits, 0);
+
+            if ($type === 'percent') {
+                $totalUnits += min((int) round($netUnits * ($value / 100)), $netUnits);
+
+                continue;
+            }
+
+            // fixed: per-unit OMR amount times the remaining (unreturned) quantity,
+            // never more than what is left on the line.
+            $totalUnits += min((int) round($value * 1000) * $remainingQuantity, $netUnits);
+        }
+
+        return $totalUnits;
     }
 
     private static function moneyToUnits(string|int|float|null $amount, string $label): int

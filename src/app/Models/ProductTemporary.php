@@ -38,6 +38,10 @@ class ProductTemporary extends Model
         'Height_Cm',
         'Volume_Cbm',
 
+        // Per-product commission (set by admin at approval time)
+        'Commission_Type',
+        'Commission_Value',
+
         'Submission_Status',
         'Submitted_By',
         'Submitted_At',
@@ -126,5 +130,15 @@ public function specs()
     {
         return $this->hasOne(ProductTemporaryImage::class, 'Products_Temporary_Id')
             ->where('Is_Default', 1);
+    }
+
+    /**
+     * Vendor-requested quantity-tier bulk prices (copied to
+     * Products_Bulk_Prices_T on approval), lowest-quantity first.
+     */
+    public function bulkPrices()
+    {
+        return $this->hasMany(ProductTemporaryBulkPrice::class, 'Products_Temporary_Id')
+            ->orderBy('Min_Qty');
     }
 }

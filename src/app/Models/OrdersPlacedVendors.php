@@ -33,6 +33,11 @@ class OrdersPlacedVendors extends Model
         'Adjusted_Commission_Amount',
         'Net_Payout_Amount',
         'Payout_Adjustment_Amount',
+
+        // Per-product commission rollup provenance + confirmation audit
+        'Commission_Source',
+        'Commission_Confirmed_By',
+        'Commission_Confirmed_At',
     ];
 
     protected $casts = [
