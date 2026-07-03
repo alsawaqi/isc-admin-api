@@ -44,7 +44,9 @@ class OrdersPlacedDetails extends Model
 
      public function product()
      {
-         return $this->belongsTo(ProductMaster::class, 'Products_Id');
+         // Order lines are historical: a soft-deleted product must keep
+         // resolving here so packing/overview pages don't lose the row.
+         return $this->belongsTo(ProductMaster::class, 'Products_Id')->withTrashed();
      }
 
      public function adjustments()

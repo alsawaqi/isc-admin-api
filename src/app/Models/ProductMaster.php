@@ -3,12 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Cviebrock\EloquentSluggable\Sluggable;
 
 class ProductMaster extends Model
 {
 
     use Sluggable;
+    use SoftDeletes;
 
     protected $table = 'Products_Master_T';
 
@@ -52,6 +54,16 @@ class ProductMaster extends Model
     public function reviews()
     {
         return $this->hasMany(ProductReview::class, 'Products_Id', 'id');
+    }
+
+    /**
+     * Quantity-tier bulk prices, ordered so the tier table always renders
+     * lowest-quantity first.
+     */
+    public function bulkPrices()
+    {
+        return $this->hasMany(ProductBulkPrice::class, 'Products_Id', 'id')
+            ->orderBy('Min_Qty');
     }
 
     public function questions()

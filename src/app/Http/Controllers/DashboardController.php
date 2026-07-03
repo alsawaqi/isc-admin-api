@@ -79,13 +79,21 @@ public function kpis()
     $lastWeekStart = now()->subDays(14);
 
     // ---------- Products ----------
-    $totalProducts = (int) DB::table('Products_Master_T')->count();
+    // Exclude soft-deleted products so these cards agree with the product
+    // lists (SoftDeletes trait). Guarded: prod DB may not have deleted_at yet.
+    $productsHaveDeletedAt = $this->hasColumn('Products_Master_T', 'deleted_at');
+
+    $totalProducts = (int) DB::table('Products_Master_T')
+        ->when($productsHaveDeletedAt, fn ($q) => $q->whereNull('deleted_at'))
+        ->count();
 
     $productsThisWeek = (int) DB::table('Products_Master_T')
+        ->when($productsHaveDeletedAt, fn ($q) => $q->whereNull('deleted_at'))
         ->where('created_at', '>=', $weekStart)
         ->count();
 
     $productsLastWeek = (int) DB::table('Products_Master_T')
+        ->when($productsHaveDeletedAt, fn ($q) => $q->whereNull('deleted_at'))
         ->whereBetween('created_at', [$lastWeekStart, $weekStart])
         ->count();
 
@@ -321,6 +329,8 @@ public function topProducts(Request $request)
     $rows = DB::table('Orders_Placed_Details_T as d')
         ->join('Orders_Placed_T as o', 'o.id', '=', 'd.Orders_Placed_Id')
         ->join('Products_Master_T as p', 'p.id', '=', 'd.Products_Id')
+        // Soft-deleted products drop out of this catalog widget (guarded).
+        ->when($this->hasColumn('Products_Master_T', 'deleted_at'), fn ($q) => $q->whereNull('p.deleted_at'))
         ->whereIn('o.Status', $validStatuses) // comment this line if you want ALL orders
         ->groupBy('d.Products_Id', 'p.Product_Name', 'p.Product_Price')
         ->select([
@@ -355,6 +365,8 @@ public function stockReport(Request $request)
     // 3) then highest stock (optional)
     $rows = DB::table('Products_Master_T')
         // ->where('Status', $activeStatus)
+        // Soft-deleted products don't belong in the stock report (guarded).
+        ->when($this->hasColumn('Products_Master_T', 'deleted_at'), fn ($q) => $q->whereNull('deleted_at'))
         ->select('id', 'Product_Name', 'Product_Price', 'Product_Stock')
         ->orderByRaw("CASE 
             WHEN Product_Stock <= 0 THEN 0
@@ -664,6 +676,7 @@ public function intentInsights(Request $request)
     [$from, $to, $range] = $this->dashboardRange($request);
     $cartHasDeletedAt = $this->hasColumn('Customers_Carts_T', 'deleted_at');
     $favoriteHasDeletedAt = $this->hasColumn('Favorites_Master_T', 'deleted_at');
+    $productsHaveDeletedAt = $this->hasColumn('Products_Master_T', 'deleted_at');
 
     $cartActiveExpression = $cartHasDeletedAt
         ? 'SUM(CASE WHEN c.deleted_at IS NULL THEN 1 ELSE 0 END)'
@@ -683,6 +696,9 @@ public function intentInsights(Request $request)
 
     $cartProducts = DB::table('Customers_Carts_T as c')
         ->leftJoin('Products_Master_T as p', 'p.id', '=', 'c.Products_Id')
+        // Drop soft-deleted products from the top-carted widget (unmatched
+        // rows keep their 'Product #id' fallback: p.deleted_at is NULL there).
+        ->when($productsHaveDeletedAt, fn ($q) => $q->whereNull('p.deleted_at'))
         ->whereBetween('c.created_at', [$from, $to])
         ->groupBy('c.Products_Id')
         ->selectRaw('c.Products_Id as product_id')
@@ -707,6 +723,8 @@ public function intentInsights(Request $request)
 
     $favoriteProducts = DB::table('Favorites_Master_T as f')
         ->leftJoin('Products_Master_T as p', 'p.id', '=', 'f.Products_Id')
+        // Same guard as the cart widget above.
+        ->when($productsHaveDeletedAt, fn ($q) => $q->whereNull('p.deleted_at'))
         ->whereBetween('f.created_at', [$from, $to])
         ->groupBy('f.Products_Id')
         ->selectRaw('f.Products_Id as product_id')
