@@ -1330,9 +1330,9 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
     private function approvedUpdateFieldLabels(): array
     {
         return [
-            'Product_Department_Id' => 'Department',
-            'Product_Sub_Department_Id' => 'Sub Department',
-            'Product_Sub_Sub_Department_Id' => 'Sub-Sub Department',
+            'Product_Department_Id' => 'Category',
+            'Product_Sub_Department_Id' => 'Subcategory',
+            'Product_Sub_Sub_Department_Id' => 'Sub-subcategory',
             'Product_Type_Id' => 'Type',
             'Product_Brand_Id' => 'Brand',
             'Product_Manufacture_Id' => 'Manufacture',

@@ -161,7 +161,7 @@ class ProductDepartmentsController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Department updated successfully',
+                'message' => 'Category updated successfully',
                 'data' => $department,
             ], 200);
         } catch (\Exception $e) {
@@ -189,7 +189,7 @@ class ProductDepartmentsController extends Controller
                 $productdepartment->delete();
 
                 // Return a success response
-                return response()->json(['message' => 'Product department deleted successfully'], 200);
+                return response()->json(['message' => 'Product category deleted successfully'], 200);
             });
          } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);

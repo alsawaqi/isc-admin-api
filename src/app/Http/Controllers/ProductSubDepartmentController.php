@@ -81,7 +81,7 @@ class ProductSubDepartmentController extends Controller
                 'Created_By' => $request->user()->id,
             ]);
         });
-        return response()->json(['message' => 'Product Sub Department created successfully'], 201);
+        return response()->json(['message' => 'Product Subcategory created successfully'], 201);
     }
 
 
@@ -108,11 +108,11 @@ class ProductSubDepartmentController extends Controller
             $productsubdepartment->save();
 
             return response()->json([
-                'message' => 'Product Sub Department updated successfully',
+                'message' => 'Product Subcategory updated successfully',
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'message' => 'Error updating Product Sub Department: ' . $e->getMessage(),
+                'message' => 'Error updating Product Subcategory: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -140,7 +140,7 @@ class ProductSubDepartmentController extends Controller
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'message' => 'Error deleting Product Sub Department: ' . $e->getMessage(),
+                'message' => 'Error deleting Product Subcategory: ' . $e->getMessage(),
             ], 500);
         }
     }

@@ -442,9 +442,9 @@ class ProductDiscountController extends Controller
     {
         return match ($discount->Target_Type) {
             'product' => $discount->product?->Product_Name ?? 'Product target',
-            'department' => $discount->department?->Product_Department_Name ?? 'Department target',
-            'sub_department' => $discount->subDepartment?->Sub_Department_Name ?? 'Sub department target',
-            'sub_sub_department' => $discount->subSubDepartment?->Product_Sub_Sub_Department_Name ?? 'Sub sub department target',
+            'department' => $discount->department?->Product_Department_Name ?? 'Category target',
+            'sub_department' => $discount->subDepartment?->Sub_Department_Name ?? 'Subcategory target',
+            'sub_sub_department' => $discount->subSubDepartment?->Product_Sub_Sub_Department_Name ?? 'Sub-subcategory target',
             default => 'Target',
         };
     }

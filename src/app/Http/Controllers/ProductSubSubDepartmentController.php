@@ -113,7 +113,7 @@ class ProductSubSubDepartmentController extends Controller
         }
 
         return response()->json([
-            'message' => 'Sub Sub Department created successfully',
+            'message' => 'Sub-subcategory created successfully',
             'data' => $result
         ]);
     }
@@ -181,7 +181,7 @@ class ProductSubSubDepartmentController extends Controller
                 $productsubsub->delete();
             });
 
-            return response()->json(['message' => 'Sub Sub Department deleted successfully'], 200);
+            return response()->json(['message' => 'Sub-subcategory deleted successfully'], 200);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
