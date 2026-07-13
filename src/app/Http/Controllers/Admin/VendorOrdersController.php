@@ -29,6 +29,7 @@ class VendorOrdersController extends Controller
 
         $q = OrdersPlacedVendors::query()
             ->with(['vendor'])
+            ->whereHas('order', fn ($order) => $order->actualCommerceOrder())
             ->where('Status', $status)
             ->orderByDesc('id');
 
@@ -91,6 +92,7 @@ class VendorOrdersController extends Controller
 
     $q = OrdersPlacedVendors::query()
         ->with(['vendor'])
+        ->whereHas('order', fn ($order) => $order->actualCommerceOrder())
         ->where('Status', 'commission_set')
         ->orderByDesc('id');
 
@@ -129,6 +131,7 @@ class VendorOrdersController extends Controller
     public function show(int $id)
     {
         $vendorOrder = OrdersPlacedVendors::query()
+            ->whereHas('order', fn ($order) => $order->actualCommerceOrder())
             ->where('id', $id)
             ->firstOrFail();
 
@@ -187,6 +190,10 @@ class VendorOrdersController extends Controller
 
         $vendorOrder = OrdersPlacedVendors::query()->findOrFail($id);
 
+        if ($reason = $this->unpaidCardOrderReason($vendorOrder)) {
+            return response()->json(['success' => false, 'message' => $reason], 409);
+        }
+
         // Never touch commission after the payout has been made
         if (($vendorOrder->Payout_Status ?? '') === 'paid') {
             return response()->json([
@@ -240,6 +247,10 @@ class VendorOrdersController extends Controller
      */
     private function commissionConfirmIneligibleReason(OrdersPlacedVendors $vendorOrder): ?string
     {
+        if ($reason = $this->unpaidCardOrderReason($vendorOrder)) {
+            return $reason;
+        }
+
         if (($vendorOrder->Payout_Status ?? '') === 'paid') {
             return 'This vendor order is already paid out.';
         }
@@ -329,6 +340,10 @@ class VendorOrdersController extends Controller
     ]);
 
     $vendorOrder = OrdersPlacedVendors::query()->findOrFail($id);
+
+    if ($reason = $this->unpaidCardOrderReason($vendorOrder)) {
+        return response()->json(['success' => false, 'message' => $reason], 409);
+    }
 
     // Must have commission set first
     if (is_null($vendorOrder->Commission_Amount) || (float)$vendorOrder->Commission_Amount < 0) {
@@ -421,4 +436,49 @@ class VendorOrdersController extends Controller
     ]);
 }
 
+    private function unpaidCardOrderReason(OrdersPlacedVendors $vendorOrder): ?string
+    {
+        $order = DB::table('Orders_Placed_T')
+            ->where('id', $vendorOrder->Orders_Placed_Id)
+            ->first();
+
+        if (!$order) {
+            return 'The parent order could not be verified.';
+        }
+
+        $cardPayments = DB::table('Sales_Transaction_Header_T as h')
+            ->join('Sales_Transactions_Details_T as p', 'p.Sales_Transaction_Header_Id', '=', 'h.id')
+            ->where('h.Orders_Placed_Id', $order->id)
+            ->where('p.Payment_Method', 'card')
+            ->where('p.Payment_Gateway', 'amwal_smartbox')
+            ->get(['p.Payment_Status']);
+
+        $attempts = Schema::hasTable('Payment_Gateway_Attempts_T')
+            ? DB::table('Payment_Gateway_Attempts_T')
+                ->where('Orders_Placed_Id', $order->id)
+                ->where('Gateway', 'amwal_smartbox')
+                ->get(['Status'])
+            : collect();
+
+        if ($cardPayments->isEmpty() && $attempts->isEmpty()) {
+            return null;
+        }
+
+        $hasReviewAttempt = $attempts->contains(
+            fn ($attempt) => strtolower((string) ($attempt->Status ?? '')) === 'paid_requires_review'
+        );
+        $isPaid = strtolower((string) ($order->Payment_Status ?? '')) === 'paid'
+            && $cardPayments->isNotEmpty()
+            && $cardPayments->every(
+                fn ($payment) => strtolower((string) ($payment->Payment_Status ?? '')) === 'paid'
+            )
+            && ! $hasReviewAttempt
+            && ($attempts->isEmpty() || $attempts->contains(
+                fn ($attempt) => strtolower((string) ($attempt->Status ?? '')) === 'paid'
+            ));
+
+        return $isPaid
+            ? null
+            : 'Commission and payout actions are blocked until this card order has a verified payment.';
+    }
 }

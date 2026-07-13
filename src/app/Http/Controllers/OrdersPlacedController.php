@@ -17,6 +17,8 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\SalesTransactionHeader;
 use App\Models\SalesTransactionDetails;
 use App\Services\Orders\OrderReturnRefundService;
+use App\Services\Orders\UnpaidAmwalOrderCancellationService;
+use App\Services\Payments\OfflinePaymentConfirmationService;
 use App\Services\Notifications\CustomerNotificationService;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -81,6 +83,11 @@ class OrdersPlacedController extends Controller
         $query->orderBy($sortBy, $sortDir);
 
         $query->where('Status', 'pending');
+        $query->where(function ($visible) {
+            $visible->whereNull('Payment_Method')
+                ->orWhere('Payment_Method', '<>', 'card')
+                ->orWhere('Payment_Status', 'paid');
+        });
 
         $this->addHasVendorItemsFlag($query);
 
@@ -108,6 +115,17 @@ class OrdersPlacedController extends Controller
         if (!empty($customerId)) {
             $query->where('Customers_Id', $customerId);
         }
+
+        $query->where(function ($visible) {
+            $visible->whereNull('Payment_Method')
+                ->orWhere('Payment_Method', '<>', 'card')
+                ->orWhereIn('Payment_Status', [
+                    'paid',
+                    'paid_requires_review',
+                    'refunded',
+                    'partially_refunded',
+                ]);
+        });
 
         // whitelist sortable columns
         if (! in_array($sortBy, ['id', 'Transaction_Number', 'created_at'])) {
@@ -334,6 +352,11 @@ class OrdersPlacedController extends Controller
             $query->where('Status', $status);
         }
 
+        // Provisional/failed/cancelled card checkout rows are payment audit
+        // records, not commerce orders. Use the central visibility policy so
+        // "View All Orders" stays aligned with sales and dashboard surfaces.
+        $query->actualCommerceOrder();
+
         $this->addHasVendorItemsFlag($query);
 
 
@@ -455,15 +478,10 @@ class OrdersPlacedController extends Controller
 
         $order        = OrdersPlaced::findOrFail($id);
         $orderDetails = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
-        $saleHeader   = SalesTransactionHeader::where('Orders_Placed_Id', $order->id)->firstOrFail();
+        $this->ensurePaymentAllowsFulfillment($order);
 
-        return DB::transaction(function () use ($request, $order, $orderDetails, $saleHeader) {
+        return DB::transaction(function () use ($request, $order, $orderDetails) {
             try {
-                // 1) Mark all sales details as "confirmed"
-                SalesTransactionDetails::where('Sales_Transaction_Header_Id', $saleHeader->id)
-                    ->update(['Payment_Status' => 'confirmed']);
-
-                // 2) Get signature file
                 if (! $request->hasFile('signature')) {
                     throw new \RuntimeException('No signature file received.');
                 }
@@ -516,12 +534,70 @@ class OrdersPlacedController extends Controller
         });
     }
 
+    public function confirmOfflinePayment(Request $request, $id): JsonResponse
+    {
+        $actor = $request->user();
+        abort_unless(
+            $actor && $actor->can('order verification'),
+            403,
+            'You are not allowed to verify bank-transfer payments.',
+        );
+
+        $order = OrdersPlaced::query()->findOrFail($id);
+        $method = strtolower((string) $order->Payment_Method);
+        abort_unless(
+            $method === 'transfer',
+            409,
+            'COD is confirmed only by the delivery or pickup handover workflow.',
+        );
+
+        $rules = [
+            'note' => ['required', 'string', 'max:300'],
+            'signature' => ['required', 'file', 'image', 'max:5120'],
+            'transfer_reference' => ['required', 'string', 'max:120'],
+        ];
+        $validated = $request->validate($rules);
+
+        $signature = $this->storeOrderSignature($request->file('signature'), (int) $id);
+
+        try {
+            $result = app(OfflinePaymentConfirmationService::class)->confirm(
+                orderId: (int) $id,
+                actorId: (int) $actor->id,
+                actorName: $actor->User_Name ?? $actor->name ?? 'Admin',
+                actorRole: method_exists($actor, 'getRoleNames')
+                    ? $actor->getRoleNames()->first()
+                    : null,
+                note: $validated['note'],
+                transferReference: $validated['transfer_reference'] ?? null,
+                signature: $signature,
+            );
+
+            if ($result['idempotent'] && ! empty($signature['path'])) {
+                Storage::disk('r2')->delete($signature['path']);
+            }
+        } catch (\Throwable $exception) {
+            if (! empty($signature['path'])) {
+                Storage::disk('r2')->delete($signature['path']);
+            }
+            throw $exception;
+        }
+
+        return response()->json([
+            'message' => $result['idempotent']
+                ? 'This payment was already confirmed.'
+                : 'Payment confirmed and loyalty points settled.',
+            'data' => $result,
+        ]);
+    }
+
 
 
 
     public function cancel(Request $request, $id): JsonResponse
     {
         $order = OrdersPlaced::findOrFail($id);
+        $this->ensureCapturedAmwalRefundIsHandledExternally($order);
 
         $request->validate([
             'note' => ['nullable', 'string', 'max:2000'],
@@ -529,6 +605,37 @@ class OrdersPlacedController extends Controller
         ]);
 
         $selectedLineIds = $this->selectedLineIdsFromRequest($request);
+
+        if ($this->isAmwalOrder($order)) {
+            if ($selectedLineIds->isNotEmpty()) {
+                return response()->json([
+                    'message' => 'An unpaid AmwalPay order must be cancelled in full because its signed amount covers the complete order.',
+                ], 409);
+            }
+
+            $signature = $this->storeOrderSignature($request->file('signature'), $order->id);
+            $actor = Auth::user();
+            $result = app(UnpaidAmwalOrderCancellationService::class)->cancel(
+                orderId: (int) $order->id,
+                actorId: (int) Auth::id(),
+                actorName: $actor?->User_Name ?? $actor?->name ?? 'System',
+                actorRole: $actor?->role ?? 'accounting',
+                signature: $signature,
+                note: $request->input('note'),
+            );
+
+            $freshOrder = $order->fresh();
+            $this->notifyCustomerOrderStatus($freshOrder, (string) $freshOrder->Status);
+
+            return response()->json([
+                'ok' => true,
+                'payment_status' => $freshOrder->Payment_Status,
+                'released_lines' => $result['released_lines'],
+                'released_loyalty_points' => $result['released_loyalty_points'],
+                'cart_restoration' => $result['cart_restoration'],
+                'idempotent' => $result['idempotent'],
+            ]);
+        }
 
         DB::transaction(function () use ($order, $selectedLineIds, $request) {
 
@@ -624,6 +731,7 @@ class OrdersPlacedController extends Controller
         ]);
 
         $order = OrdersPlaced::findOrFail($id);
+        $this->ensureAmwalReturnIsHandledThroughGateway($order);
         $signature = $this->storeOrderSignature($request->file('signature'), $order->id);
 
         $result = app(OrderReturnRefundService::class)->apply(
@@ -658,6 +766,7 @@ class OrdersPlacedController extends Controller
         ]);
 
         $order = OrdersPlaced::findOrFail($id);
+        $this->ensurePaymentAllowsFulfillment($order);
         $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
 
         try{
@@ -803,6 +912,7 @@ class OrdersPlacedController extends Controller
         ]);
 
         $order = OrdersPlaced::findOrFail($id);
+        $this->ensurePaymentAllowsFulfillment($order);
         $orderDetails = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
         try {
             if (strtolower((string) $order->Delivery_Type) === 'pickup') {
@@ -991,17 +1101,52 @@ class OrdersPlacedController extends Controller
 
     public function complete($id)
     {
+        $actor = Auth::user();
+        abort_unless(
+            $actor && $actor->canAny(['order shipments', 'order delivery']),
+            403,
+            'You are not allowed to complete delivered orders.',
+        );
 
-        $order = OrdersPlaced::where('id', $id)
-            ->firstOrFail();
+        $result = DB::transaction(function () use ($id) {
+            $order = OrdersPlaced::query()
+                ->whereKey($id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
-        DB::transaction(function () use ($order, $orderplacedetail) {
-            foreach ($orderplacedetail as $detail) {
+            abort_if(
+                strtolower((string) ($order->Delivery_Type ?? '')) === 'pickup',
+                409,
+                'Pickup orders must be completed through the pickup handover workflow.',
+            );
+            abort_unless(
+                strtolower((string) ($order->Status ?? '')) === 'shipped',
+                409,
+                'Only a shipped order can be marked delivered.',
+            );
+            $this->ensurePaymentAllowsFulfillment($order);
 
+            $orderDetails = OrdersPlacedDetails::query()
+                ->where('Orders_Placed_Id', $order->id)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            // COD settlement requires the order-level delivered state. Keep
+            // detail adjustment markers intact until the settlement service
+            // has locked and validated them; a failure rolls this update back.
+            $order->update(['Status' => 'delivered']);
+            $paymentSettlement = $this->confirmCodAtHandover(
+                $order,
+                'COD collected when delivery was completed.',
+            );
+
+            foreach ($orderDetails as $detail) {
+                if (in_array(strtolower((string) $detail->Status), ['cancelled', 'returned'], true)) {
+                    continue;
+                }
                 $detail->update(['Status' => 'delivered']);
             }
-            $order->update(['Status' => 'delivered']);
 
             OrderProcessLog::create([
                 'Orders_Placed_Id' => $order->id,
@@ -1013,23 +1158,38 @@ class OrdersPlacedController extends Controller
                 'Actor_Role'       => optional(Auth::user())->role ?? null,
                 'Notes'            => 'Order marked complete.',
             ]);
+
+            return [
+                'order_id' => (int) $order->id,
+                'payment_settlement' => $paymentSettlement,
+            ];
         });
 
-        $this->notifyCustomerOrderStatus($order->fresh(), 'delivered');
+        $order = OrdersPlaced::findOrFail($result['order_id']);
+        $this->notifyCustomerOrderStatus($order, 'delivered');
 
         return response()->json([
             'message' => 'Order completed.',
             'order_id' => $order->id,
             'status' => 'delivered',
+            'loyalty_points_awarded' => $result['payment_settlement']['points_awarded'] ?? 0,
         ]);
     }
 
 
     public function pickupComplete(Request $request, $id)
     {
+        $actor = $request->user();
+        abort_unless(
+            $actor && $actor->can('order pickup'),
+            403,
+            'You are not allowed to complete pickup handovers.',
+        );
+
         $order = OrdersPlaced::where('id', $id)
             ->where('Delivery_Type', 'pickup')
             ->firstOrFail();
+        $this->ensurePaymentAllowsFulfillment($order);
 
         // BACKWARD-COMPAT GUARD: the collector-ID gate only applies once the
         // pickup person columns exist (pre-migration prod keeps old behavior).
@@ -1050,6 +1210,12 @@ class OrdersPlacedController extends Controller
             ], 409);
         }
 
+        abort_unless(
+            strtolower((string) ($order->Status ?? '')) === 'ready_for_collection',
+            409,
+            'Only an order that is ready for collection can be handed over.',
+        );
+
         $idImagePath = null;
 
         if ($captureCollector) {
@@ -1069,47 +1235,90 @@ class OrdersPlacedController extends Controller
             }
         }
 
-        $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
+        try {
+            $result = DB::transaction(function () use ($id, $request, $captureCollector, $idImagePath) {
+                $order = OrdersPlaced::query()
+                    ->whereKey($id)
+                    ->where('Delivery_Type', 'pickup')
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-        DB::transaction(function () use ($order, $orderplacedetail, $request, $captureCollector, $idImagePath) {
-            foreach ($orderplacedetail as $detail) {
-                $detail->update(['Status' => 'delivered']);
-            }
+                $this->ensurePaymentAllowsFulfillment($order);
 
-            $orderUpdate = ['Status' => 'delivered'];
-            $notes       = 'Customer collected pickup order.';
-
-            if ($captureCollector) {
-                $orderUpdate += [
-                    'Pickup_Person_Name'    => $request->input('pickup_person_name'),
-                    'Pickup_Person_Contact' => $request->input('pickup_person_contact'),
-                    'Pickup_Id_Image_Path'  => $idImagePath,
-                    'Picked_Up_At'          => now(),
-                    'Picked_Up_By'          => Auth::id(),
-                ];
-
-                $notes .= sprintf(
-                    ' Collected by: %s (%s)',
-                    $request->input('pickup_person_name'),
-                    $request->input('pickup_person_contact')
+                $alreadyCollected = strcasecmp((string) $order->Status, 'delivered') === 0
+                    || ($captureCollector && ! empty($order->Pickup_Person_Name));
+                abort_if($alreadyCollected, 409, 'This pickup order has already been collected.');
+                abort_unless(
+                    strtolower((string) ($order->Status ?? '')) === 'ready_for_collection',
+                    409,
+                    'Only an order that is ready for collection can be handed over.',
                 );
+
+                $orderDetails = OrdersPlacedDetails::query()
+                    ->where('Orders_Placed_Id', $order->id)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+
+                $orderUpdate = ['Status' => 'delivered'];
+                $notes = 'Customer collected pickup order.';
+
+                if ($captureCollector) {
+                    $orderUpdate += [
+                        'Pickup_Person_Name' => $request->input('pickup_person_name'),
+                        'Pickup_Person_Contact' => $request->input('pickup_person_contact'),
+                        'Pickup_Id_Image_Path' => $idImagePath,
+                        'Picked_Up_At' => now(),
+                        'Picked_Up_By' => Auth::id(),
+                    ];
+
+                    $notes .= sprintf(
+                        ' Collected by: %s (%s)',
+                        $request->input('pickup_person_name'),
+                        $request->input('pickup_person_contact')
+                    );
+                }
+
+                // Preserve adjustment markers until COD settlement validates
+                // them. The surrounding transaction rolls back this header
+                // update if settlement detects a cancelled/refunded line.
+                $order->update($orderUpdate);
+                $paymentSettlement = $this->confirmCodAtHandover(
+                    $order,
+                    'COD collected when the pickup order was handed over.',
+                );
+
+                foreach ($orderDetails as $detail) {
+                    if (in_array(strtolower((string) $detail->Status), ['cancelled', 'returned'], true)) {
+                        continue;
+                    }
+                    $detail->update(['Status' => 'delivered']);
+                }
+
+                OrderProcessLog::create([
+                    'Orders_Placed_Id' => $order->id,
+                    'Step_Code' => 'PICKUP_COLLECTED',
+                    'Status' => 'delivered',
+                    'Is_External' => false,
+                    'Actor_User_Id' => Auth::id(),
+                    'Actor_Name' => optional(Auth::user())->User_Name ?? 'System',
+                    'Actor_Role' => optional(Auth::user())->role ?? null,
+                    'Notes' => $notes,
+                ]);
+
+                return [
+                    'order_id' => (int) $order->id,
+                    'payment_settlement' => $paymentSettlement,
+                ];
+            });
+        } catch (\Throwable $exception) {
+            if ($idImagePath) {
+                Storage::disk('r2')->delete($idImagePath);
             }
+            throw $exception;
+        }
 
-            $order->update($orderUpdate);
-
-            OrderProcessLog::create([
-                'Orders_Placed_Id' => $order->id,
-                'Step_Code'        => 'PICKUP_COLLECTED',
-                'Status'           => 'delivered',
-                'Is_External'      => false,
-                'Actor_User_Id'    => Auth::id(),
-                'Actor_Name'       => optional(Auth::user())->User_Name ?? 'System',
-                'Actor_Role'       => optional(Auth::user())->role ?? null,
-                'Notes'            => $notes,
-            ]);
-        });
-
-        $order = $order->fresh();
+        $order = OrdersPlaced::findOrFail($result['order_id']);
 
         $this->notifyCustomerOrderStatus($order, 'delivered');
 
@@ -1121,6 +1330,7 @@ class OrdersPlacedController extends Controller
             'pickup_person_contact' => $captureCollector ? $order->Pickup_Person_Contact : null,
             'picked_up_at'          => $captureCollector ? $order->Picked_Up_At : null,
             'picked_up_by'          => $captureCollector ? $order->Picked_Up_By : null,
+            'loyalty_points_awarded' => $result['payment_settlement']['points_awarded'] ?? 0,
         ]);
     }
 
@@ -1225,6 +1435,10 @@ class OrdersPlacedController extends Controller
         $selectedLineIds = $this->selectedLineIdsFromRequest($request);
         $restoreStatus = $request->input('restore_status') ?: 'pending';
 
+        if ($restoreStatus !== 'pending') {
+            $this->ensurePaymentAllowsFulfillment($order);
+        }
+
         $detailsQuery = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)
             ->where('Status', 'on-hold');
 
@@ -1277,6 +1491,163 @@ class OrdersPlacedController extends Controller
             'released_count' => $detailsToRelease->count(),
             'order_status' => $restoreStatus,
         ]);
+    }
+
+    private function ensureCardPaymentSettled(OrdersPlaced $order): void
+    {
+        $saleHeaderIds = SalesTransactionHeader::where('Orders_Placed_Id', $order->id)->pluck('id');
+        $salePayments = $saleHeaderIds->isNotEmpty()
+            ? SalesTransactionDetails::whereIn('Sales_Transaction_Header_Id', $saleHeaderIds)->get()
+            : collect();
+
+        $amwalCardPayments = $salePayments->filter(
+            fn ($payment) => strtolower((string) ($payment->Payment_Method ?? '')) === 'card'
+                && strtolower((string) ($payment->Payment_Gateway ?? '')) === 'amwal_smartbox'
+        );
+
+        $amwalAttempts = Schema::hasTable('Payment_Gateway_Attempts_T')
+            ? DB::table('Payment_Gateway_Attempts_T')
+                ->where('Orders_Placed_Id', $order->id)
+                ->where('Gateway', 'amwal_smartbox')
+                ->get(['Status'])
+            : collect();
+
+        if ($amwalCardPayments->isEmpty() && $amwalAttempts->isEmpty()) {
+            return;
+        }
+
+        $orderIsPaid = strtolower((string) ($order->Payment_Status ?? '')) === 'paid';
+        $cardPaymentsArePaid = $amwalCardPayments
+            ->isNotEmpty()
+            && $amwalCardPayments
+            ->every(fn ($payment) => strtolower((string) ($payment->Payment_Status ?? '')) === 'paid');
+        $hasPaidAttempt = $amwalAttempts->isEmpty()
+            || $amwalAttempts->contains(
+                fn ($attempt) => strtolower((string) ($attempt->Status ?? '')) === 'paid'
+            );
+        $hasReviewAttempt = $amwalAttempts->contains(
+            fn ($attempt) => strtolower((string) ($attempt->Status ?? '')) === 'paid_requires_review'
+        );
+
+        abort_unless(
+            $orderIsPaid && $cardPaymentsArePaid && $hasPaidAttempt && ! $hasReviewAttempt,
+            409,
+            'This card order is awaiting payment reconciliation and cannot advance in fulfillment.',
+        );
+    }
+
+    private function ensurePaymentAllowsFulfillment(OrdersPlaced $order): void
+    {
+        $this->ensureCardPaymentSettled($order);
+
+        if (strtolower((string) ($order->Payment_Method ?? '')) !== 'transfer') {
+            return;
+        }
+
+        abort_unless(
+            strtolower((string) ($order->Payment_Status ?? '')) === 'paid',
+            409,
+            'This bank transfer has not been verified and the order cannot advance in fulfillment.',
+        );
+    }
+
+    /** @return array<string, mixed>|null */
+    private function confirmCodAtHandover(OrdersPlaced $order, string $note): ?array
+    {
+        if (strtolower((string) ($order->Payment_Method ?? '')) !== 'cod') {
+            return null;
+        }
+
+        $actor = Auth::user();
+        $allowedPermissions = strtolower((string) ($order->Delivery_Type ?? '')) === 'pickup'
+            ? ['order pickup']
+            : ['order shipments', 'order delivery'];
+
+        abort_unless(
+            $actor && $actor->canAny($allowedPermissions),
+            403,
+            'You are not allowed to confirm COD collection.',
+        );
+
+        return app(OfflinePaymentConfirmationService::class)->confirm(
+            orderId: (int) $order->id,
+            actorId: (int) $actor->id,
+            actorName: $actor->User_Name ?? $actor->name ?? 'Admin',
+            actorRole: method_exists($actor, 'getRoleNames')
+                ? $actor->getRoleNames()->first()
+                : null,
+            note: $note,
+            transferReference: null,
+            signature: [],
+        );
+    }
+
+    private function ensureCapturedAmwalRefundIsHandledExternally(OrdersPlaced $order): void
+    {
+        $orderHasCapturedCardStatus = strtolower((string) ($order->Payment_Method ?? '')) === 'card'
+            && in_array(
+                strtolower((string) ($order->Payment_Status ?? '')),
+                ['paid', 'paid_requires_review'],
+                true,
+            );
+        $saleHeaderIds = SalesTransactionHeader::where('Orders_Placed_Id', $order->id)->pluck('id');
+        $hasCapturedAmwalPayment = $saleHeaderIds->isNotEmpty()
+            ? SalesTransactionDetails::whereIn('Sales_Transaction_Header_Id', $saleHeaderIds)
+                ->where('Payment_Gateway', 'amwal_smartbox')
+                ->whereIn('Payment_Status', ['paid', 'paid_requires_review'])
+                ->exists()
+            : false;
+
+        $hasCapturedAmwalAttempt = Schema::hasTable('Payment_Gateway_Attempts_T')
+            && DB::table('Payment_Gateway_Attempts_T')
+                ->where('Orders_Placed_Id', $order->id)
+                ->where('Gateway', 'amwal_smartbox')
+                ->whereIn('Status', ['paid', 'paid_requires_review'])
+                ->exists();
+
+        abort_if(
+            $orderHasCapturedCardStatus || $hasCapturedAmwalPayment || $hasCapturedAmwalAttempt,
+            409,
+            'Refund or void this captured card transaction in its payment gateway and record reconciliation before cancelling the order.',
+        );
+    }
+
+    private function isAmwalOrder(OrdersPlaced $order): bool
+    {
+        $saleHeaderIds = SalesTransactionHeader::where('Orders_Placed_Id', $order->id)->pluck('id');
+        $hasAmwalPayment = $saleHeaderIds->isNotEmpty()
+            ? SalesTransactionDetails::whereIn('Sales_Transaction_Header_Id', $saleHeaderIds)
+                ->where('Payment_Gateway', 'amwal_smartbox')
+                ->exists()
+            : false;
+        $hasAmwalAttempt = Schema::hasTable('Payment_Gateway_Attempts_T')
+            && DB::table('Payment_Gateway_Attempts_T')
+                ->where('Orders_Placed_Id', $order->id)
+                ->where('Gateway', 'amwal_smartbox')
+                ->exists();
+
+        return $hasAmwalPayment || $hasAmwalAttempt;
+    }
+
+    private function ensureAmwalReturnIsHandledThroughGateway(OrdersPlaced $order): void
+    {
+        $saleHeaderIds = SalesTransactionHeader::where('Orders_Placed_Id', $order->id)->pluck('id');
+        $hasAmwalPayment = $saleHeaderIds->isNotEmpty()
+            ? SalesTransactionDetails::whereIn('Sales_Transaction_Header_Id', $saleHeaderIds)
+                ->where('Payment_Gateway', 'amwal_smartbox')
+                ->exists()
+            : false;
+        $hasAmwalAttempt = Schema::hasTable('Payment_Gateway_Attempts_T')
+            && DB::table('Payment_Gateway_Attempts_T')
+                ->where('Orders_Placed_Id', $order->id)
+                ->where('Gateway', 'amwal_smartbox')
+                ->exists();
+
+        abort_if(
+            $hasAmwalPayment || $hasAmwalAttempt,
+            409,
+            'AmwalPay returns and refunds require a verified APG refund or void and an audited reconciliation before local adjustments.',
+        );
     }
 
     private function notifyCustomerOrderStatus(?OrdersPlaced $order, string $status): void

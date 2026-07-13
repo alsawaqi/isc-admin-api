@@ -373,6 +373,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/orders-placed/delivered', 'delivered_index');
         Route::post('/orders-placed', 'store');
         Route::post('/orders-placed/{id}/pack', 'packing');
+        Route::post('/orders-placed/{id}/confirm-payment', 'confirmOfflinePayment');
         Route::post('/orders-placed/{id}/dispatch', 'dispatch');
         Route::post('/orders-placed/{id}/shipment', 'shipment');
         Route::post('/orders-placed/{id}/pickup-complete', 'pickupComplete');

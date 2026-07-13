@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Orders\ActualCommerceOrder;
 use Carbon\CarbonPeriod;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -30,7 +32,7 @@ class DashboardController extends Controller
     };
 
     // Query the orders placed table
-    $rows = DB::table('Orders_Placed_T')
+    $rows = $this->actualOrdersQuery()
         
         ->selectRaw("$bucket as bucket")
         ->selectRaw("
@@ -113,13 +115,13 @@ public function kpis()
         ->count();
 
     // ---------- Orders ----------
-    $totalOrders = (int) DB::table('Orders_Placed_T')->count();
+    $totalOrders = (int) $this->actualOrdersQuery()->count();
 
-    $ordersThisWeek = (int) DB::table('Orders_Placed_T')
+    $ordersThisWeek = (int) $this->actualOrdersQuery()
         ->where('created_at', '>=', $weekStart)
         ->count();
 
-    $ordersLastWeek = (int) DB::table('Orders_Placed_T')
+    $ordersLastWeek = (int) $this->actualOrdersQuery()
         ->whereBetween('created_at', [$lastWeekStart, $weekStart])
         ->count();
 
@@ -127,16 +129,16 @@ public function kpis()
     // Treat "sales" as orders that are moving/finished (exclude cancelled/returned/on-hold/pending)
     $salesStatuses = ['processing','packed','dispatched','shipped','delivered'];
 
-    $totalSales = (float) DB::table('Orders_Placed_T')
+    $totalSales = (float) $this->actualOrdersQuery()
         ->whereIn('Status', $salesStatuses)
         ->sum('Total_Price');
 
-    $salesThisWeek = (float) DB::table('Orders_Placed_T')
+    $salesThisWeek = (float) $this->actualOrdersQuery()
         ->whereIn('Status', $salesStatuses)
         ->where('created_at', '>=', $weekStart)
         ->sum('Total_Price');
 
-    $salesLastWeek = (float) DB::table('Orders_Placed_T')
+    $salesLastWeek = (float) $this->actualOrdersQuery()
         ->whereIn('Status', $salesStatuses)
         ->whereBetween('created_at', [$lastWeekStart, $weekStart])
         ->sum('Total_Price');
@@ -164,7 +166,7 @@ public function recentOrders(Request $request)
     if ($limit <= 0) $limit = 5;
     if ($limit > 20) $limit = 20;
 
-    $rows = DB::table('Orders_Placed_T as o')
+    $rows = $this->actualOrdersQuery('o')
         ->leftJoin('Customers_Master_T as c', 'c.id', '=', 'o.Customers_Id')
         ->select([
             'o.id',
@@ -221,7 +223,7 @@ public function transactionsFeed(Request $request)
         $to   = now()->endOfMonth();
     }
 
-    $rows = DB::table('Sales_Transactions_Details_T as d')
+    $transactionsQuery = DB::table('Sales_Transactions_Details_T as d')
         ->join('Sales_Transaction_Header_T as h', 'h.id', '=', 'd.Sales_Transaction_Header_Id')
         ->leftJoin('Orders_Placed_T as o', 'o.id', '=', 'h.Orders_Placed_Id')
         ->leftJoin('Customers_Master_T as c', 'c.id', '=', 'o.Customers_Id')
@@ -242,8 +244,9 @@ public function transactionsFeed(Request $request)
         ->selectRaw("COALESCE(o.Order_Code, '—') as Order_Code")
         ->selectRaw("COALESCE(c.Customer_Full_Name, '—') as Customer_Full_Name")
         ->orderByDesc('d.created_at')
-        ->limit($limit)
-        ->get();
+        ->limit($limit);
+
+    $rows = $this->applyActualOrderFilter($transactionsQuery, 'o.')->get();
 
     return response()->json([
         'data' => $rows
@@ -265,7 +268,7 @@ public function ordersTrend(Request $request)
     $prevTo   = now()->subDays($days)->endOfDay();
 
     // group per day (SQL Server)
-    $rows = DB::table('Orders_Placed_T')
+    $rows = $this->actualOrdersQuery()
         ->whereBetween('created_at', [$currentFrom, $currentTo])
         ->selectRaw("CONVERT(date, created_at) as d")
         ->selectRaw("SUM(Total_Price) as total_amount")
@@ -288,11 +291,11 @@ public function ordersTrend(Request $request)
         $seriesCount[]  = (int)   (($map[$key]->total_orders ?? 0));
     }
 
-    $currentTotal = (float) DB::table('Orders_Placed_T')
+    $currentTotal = (float) $this->actualOrdersQuery()
         ->whereBetween('created_at', [$currentFrom, $currentTo])
         ->sum('Total_Price');
 
-    $prevTotal = (float) DB::table('Orders_Placed_T')
+    $prevTotal = (float) $this->actualOrdersQuery()
         ->whereBetween('created_at', [$prevFrom, $prevTo])
         ->sum('Total_Price');
 
@@ -408,6 +411,35 @@ private function previousRange(Carbon $from, Carbon $to): array
     ];
 }
 
+private function actualOrdersQuery(?string $alias = null): QueryBuilder
+{
+    $query = DB::table('Orders_Placed_T'.($alias ? " as {$alias}" : ''));
+
+    return $this->applyActualOrderFilter($query, $alias ? "{$alias}." : '');
+}
+
+private function applyActualOrderFilter(QueryBuilder $query, string $prefix = ''): QueryBuilder
+{
+    if (! $this->hasColumn('Orders_Placed_T', 'Payment_Method')
+        || ! $this->hasColumn('Orders_Placed_T', 'Payment_Status')) {
+        return $query;
+    }
+
+    return $query->where(function (QueryBuilder $visible) use ($prefix) {
+        $visible->whereNull($prefix.'Payment_Method')
+            ->orWhere($prefix.'Payment_Method', '<>', 'card')
+            ->orWhereIn($prefix.'Payment_Status', ActualCommerceOrder::VISIBLE_CARD_PAYMENT_STATUSES);
+    });
+}
+
+private function actualVendorOrdersQuery(): QueryBuilder
+{
+    $query = DB::table('Orders_Placed_Vendors_T as ov')
+        ->join('Orders_Placed_T as o', 'o.id', '=', 'ov.Orders_Placed_Id');
+
+    return $this->applyActualOrderFilter($query, 'o.');
+}
+
 private function hasColumn(string $table, string $column): bool
 {
     static $cache = [];
@@ -448,7 +480,7 @@ private function orderSum(Carbon $from, Carbon $to, string $column, ?array $stat
         return 0.0;
     }
 
-    $query = DB::table('Orders_Placed_T')->whereBetween('created_at', [$from, $to]);
+    $query = $this->actualOrdersQuery()->whereBetween('created_at', [$from, $to]);
 
     if ($statuses) {
         $query->whereIn('Status', $statuses);
@@ -463,8 +495,8 @@ public function operationsSummary(Request $request)
     [$previousFrom, $previousTo] = $this->previousRange($from, $to);
     $salesStatuses = $this->orderStatusesForRevenue();
 
-    $ordersBase = DB::table('Orders_Placed_T')->whereBetween('created_at', [$from, $to]);
-    $previousOrdersBase = DB::table('Orders_Placed_T')->whereBetween('created_at', [$previousFrom, $previousTo]);
+    $ordersBase = $this->actualOrdersQuery()->whereBetween('created_at', [$from, $to]);
+    $previousOrdersBase = $this->actualOrdersQuery()->whereBetween('created_at', [$previousFrom, $previousTo]);
 
     $revenue = (float) (clone $ordersBase)->whereIn('Status', $salesStatuses)->sum('Total_Price');
     $previousRevenue = (float) (clone $previousOrdersBase)->whereIn('Status', $salesStatuses)->sum('Total_Price');
@@ -525,7 +557,7 @@ public function operationsSummary(Request $request)
             'total' => (int) $row->total,
         ]);
 
-    $paymentMethods = DB::table('Sales_Transactions_Details_T as d')
+    $paymentMethodsQuery = DB::table('Sales_Transactions_Details_T as d')
         ->join('Sales_Transaction_Header_T as h', 'h.id', '=', 'd.Sales_Transaction_Header_Id')
         ->leftJoin('Orders_Placed_T as o', 'o.id', '=', 'h.Orders_Placed_Id')
         ->whereBetween('d.created_at', [$from, $to])
@@ -533,7 +565,9 @@ public function operationsSummary(Request $request)
         ->selectRaw('COUNT(*) as total')
         ->selectRaw('SUM(ISNULL(d.Payment_Amount, 0)) as amount')
         ->groupBy(DB::raw("LOWER(ISNULL(NULLIF(d.Payment_Method, ''), 'unknown'))"))
-        ->orderByDesc('amount')
+        ->orderByDesc('amount');
+
+    $paymentMethods = $this->applyActualOrderFilter($paymentMethodsQuery, 'o.')
         ->get()
         ->map(fn ($row) => [
             'label' => $row->label,
@@ -541,13 +575,17 @@ public function operationsSummary(Request $request)
             'amount' => (float) $row->amount,
         ]);
 
-    $paymentStatuses = DB::table('Sales_Transactions_Details_T')
-        ->whereBetween('created_at', [$from, $to])
-        ->selectRaw("LOWER(ISNULL(NULLIF(Payment_Status, ''), 'unknown')) as label")
+    $paymentStatusesQuery = DB::table('Sales_Transactions_Details_T as d')
+        ->join('Sales_Transaction_Header_T as h', 'h.id', '=', 'd.Sales_Transaction_Header_Id')
+        ->leftJoin('Orders_Placed_T as o', 'o.id', '=', 'h.Orders_Placed_Id')
+        ->whereBetween('d.created_at', [$from, $to])
+        ->selectRaw("LOWER(ISNULL(NULLIF(d.Payment_Status, ''), 'unknown')) as label")
         ->selectRaw('COUNT(*) as total')
-        ->selectRaw('SUM(ISNULL(Payment_Amount, 0)) as amount')
-        ->groupBy(DB::raw("LOWER(ISNULL(NULLIF(Payment_Status, ''), 'unknown'))"))
-        ->orderByDesc('amount')
+        ->selectRaw('SUM(ISNULL(d.Payment_Amount, 0)) as amount')
+        ->groupBy(DB::raw("LOWER(ISNULL(NULLIF(d.Payment_Status, ''), 'unknown'))"))
+        ->orderByDesc('amount');
+
+    $paymentStatuses = $this->applyActualOrderFilter($paymentStatusesQuery, 'o.')
         ->get()
         ->map(fn ($row) => [
             'label' => $row->label,
@@ -555,7 +593,7 @@ public function operationsSummary(Request $request)
             'amount' => (float) $row->amount,
         ]);
 
-    $topCustomers = DB::table('Orders_Placed_T as o')
+    $topCustomers = $this->actualOrdersQuery('o')
         ->leftJoin('Customers_Master_T as c', 'c.id', '=', 'o.Customers_Id')
         ->whereBetween('o.created_at', [$from, $to])
         ->groupBy('o.Customers_Id', 'c.Customer_Full_Name', 'c.Customer_Code')
@@ -584,25 +622,25 @@ public function operationsSummary(Request $request)
     ];
 
     if (Schema::hasTable('Orders_Placed_Vendors_T')) {
-        $vendorSummary['orders'] = (int) DB::table('Orders_Placed_Vendors_T')
-            ->whereBetween('created_at', [$from, $to])
+        $vendorSummary['orders'] = (int) $this->actualVendorOrdersQuery()
+            ->whereBetween('ov.created_at', [$from, $to])
             ->count();
 
-        $vendorSummary['sales'] = (float) DB::table('Orders_Placed_Vendors_T')
-            ->whereBetween('created_at', [$from, $to])
-            ->sum('Total');
+        $vendorSummary['sales'] = (float) $this->actualVendorOrdersQuery()
+            ->whereBetween('ov.created_at', [$from, $to])
+            ->sum('ov.Total');
 
-        $vendorSummary['commission'] = (float) DB::table('Orders_Placed_Vendors_T')
-            ->whereBetween('created_at', [$from, $to])
-            ->sum('Commission_Amount');
+        $vendorSummary['commission'] = (float) $this->actualVendorOrdersQuery()
+            ->whereBetween('ov.created_at', [$from, $to])
+            ->sum('ov.Commission_Amount');
 
         if ($this->hasColumn('Orders_Placed_Vendors_T', 'Payout_Amount')) {
-            $vendorSummary['paid_out'] = (float) DB::table('Orders_Placed_Vendors_T')
-                ->whereBetween('created_at', [$from, $to])
-                ->sum('Payout_Amount');
+            $vendorSummary['paid_out'] = (float) $this->actualVendorOrdersQuery()
+                ->whereBetween('ov.created_at', [$from, $to])
+                ->sum('ov.Payout_Amount');
         }
 
-        $vendorSummary['top_vendors'] = DB::table('Orders_Placed_Vendors_T as ov')
+        $vendorSummary['top_vendors'] = $this->actualVendorOrdersQuery()
             ->leftJoin('Vendors_Master_T as v', 'v.id', '=', 'ov.Vendor_Id')
             ->whereBetween('ov.created_at', [$from, $to])
             ->groupBy('ov.Vendor_Id', 'v.Vendor_Name', 'v.Vendor_Code')
