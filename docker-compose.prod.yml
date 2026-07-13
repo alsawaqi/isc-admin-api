@@ -24,11 +24,13 @@ services:
       - proxy_network
 
   composer:
-    image: composer:latest
+    build:
+      context: .
+      dockerfile: docker/prod/php/php.dockerfile
     volumes:
       - ./src:/var/www/html
     working_dir: /var/www/html
-    command: composer install --no-dev --optimize-autoloader
+    entrypoint: ["composer"]
     networks:
       - proxy_network
 
