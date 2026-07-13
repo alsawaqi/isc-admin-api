@@ -76,6 +76,37 @@ class OrdersPlacedListingTest extends FeatureTestCase
         $this->getJson('/api/orders-placed/delivered')->assertUnauthorized();
     }
 
+    public function test_view_all_orders_hides_provisional_card_drafts(): void
+    {
+        $this->actingAsAdmin();
+        $marker = 'ACTUAL_'.strtoupper(substr(uniqid(), -8));
+
+        $draft = $this->makeOrder([
+            'Order_Code' => $marker.'_D',
+            'Transaction_Number' => $marker.'_D',
+        ]);
+        DB::table('Orders_Placed_T')->where('id', $draft->id)->update([
+            'Payment_Method' => 'card',
+            'Payment_Status' => 'pending',
+        ]);
+
+        $paid = $this->makeOrder([
+            'Order_Code' => $marker.'_P',
+            'Transaction_Number' => $marker.'_P',
+        ]);
+        DB::table('Orders_Placed_T')->where('id', $paid->id)->update([
+            'Payment_Method' => 'card',
+            'Payment_Status' => 'paid',
+        ]);
+
+        $response = $this->getJson('/api/orders-placed/delivered?status=all&search='.$marker.'&per_page=10');
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id')->map(fn ($id) => (int) $id);
+        $this->assertTrue($ids->contains((int) $paid->id));
+        $this->assertFalse($ids->contains((int) $draft->id));
+    }
+
     public function test_show_returns_404_for_missing_order(): void
     {
         $this->actingAsAdmin();
