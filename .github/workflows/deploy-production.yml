@@ -23,7 +23,9 @@ jobs:
       - name: Confirm production deployment
         env:
           CONFIRM: ${{ inputs.confirm }}
-        run: test "$CONFIRM" = "deploy-production"
+        run: |
+          test "$CONFIRM" = "deploy-production"
+          test "$GITHUB_REF" = "refs/heads/master"
 
       - uses: actions/checkout@v4
 
@@ -33,12 +35,18 @@ jobs:
       - name: Install PHP dependencies
         run: |
           docker run --rm --entrypoint composer \
+            -e APP_ENV=testing \
+            -e APP_KEY=base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+            -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: \
             -v "$PWD/src:/var/www/html" -w /var/www/html \
             isc-admin-api-ci install --no-interaction --prefer-dist
 
       - name: Run unit tests
         run: |
-          docker run --rm --entrypoint php -e APP_ENV=testing \
+          docker run --rm --entrypoint php \
+            -e APP_ENV=testing \
+            -e APP_KEY=base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+            -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: \
             -v "$PWD/src:/var/www/html" -w /var/www/html \
             isc-admin-api-ci artisan test --testsuite=Unit
 
@@ -77,15 +85,23 @@ jobs:
           case "$deploy_sha" in *[!0-9a-f]*) exit 2 ;; esac
 
           cd /home/abdallah/apps/isc-admin-api
+          test "$(git branch --show-current)" = "master"
           test -z "$(git status --porcelain --untracked-files=all)"
-          git fetch origin "$deploy_sha"
+          git fetch origin master
+          git cat-file -e "$deploy_sha^{commit}"
+          test "$(git rev-parse origin/master)" = "$deploy_sha"
           git merge-base --is-ancestor HEAD "$deploy_sha"
 
+          deployment_failed() {
+            docker compose -f docker-compose.prod.yml exec -T laravel-app \
+              php artisan down --retry=60 > /dev/null 2>&1 || true
+            echo "Deployment failed; the admin API is in maintenance mode." >&2
+          }
+          trap deployment_failed ERR
           docker compose -f docker-compose.prod.yml exec -T laravel-app \
             php artisan down --retry=60
-          trap 'echo "Deployment failed; the admin API remains in maintenance mode." >&2' ERR
 
-          git merge --ff-only "$deploy_sha"
+          git merge --ff-only origin/master
           test "$(git rev-parse HEAD)" = "$deploy_sha"
           test -z "$(git status --porcelain --untracked-files=all)"
 
@@ -108,7 +124,6 @@ jobs:
           docker compose -f docker-compose.prod.yml up -d --force-recreate nginx
           docker compose -f docker-compose.prod.yml exec -T laravel-app \
             php artisan up
-          trap - ERR
 
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
             if docker compose -f docker-compose.prod.yml exec -T nginx \
@@ -121,4 +136,5 @@ jobs:
 
           curl -fsS --retry 5 --retry-delay 2 --retry-all-errors \
             --max-time 20 https://api.avinaq.com/up > /dev/null
+          trap - ERR
           REMOTE
