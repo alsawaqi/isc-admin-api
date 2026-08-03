@@ -18,6 +18,7 @@ class SecurityPermissionSeeder extends Seeder
             'products',
             'product category',
             'departments',
+            'import product categories',
             'sub departments',
             'sub sub departments',
             'addproductsdescription',

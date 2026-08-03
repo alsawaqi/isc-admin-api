@@ -19,6 +19,7 @@ use App\Http\Controllers\OrdersPlacedController;
 use App\Http\Controllers\OperationsReportController;
 use App\Http\Controllers\ProductBrandsController;
 use App\Http\Controllers\ProductDepartmentsController;
+use App\Http\Controllers\ProductHierarchyImportController;
 use App\Http\Controllers\ProductDiscountController;
 use App\Http\Controllers\ProductEngagementAdminController;
 use App\Http\Controllers\ProductImagesController;
@@ -119,6 +120,14 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/sub-sub-departments/{subDepartmentId}', 'bySubDepartment');
         Route::delete('/productdepartment/{productdepartment}', 'destroy');
     });
+
+    Route::controller(ProductHierarchyImportController::class)
+        ->prefix('product-hierarchy-import')
+        ->middleware('throttle:6,1')
+        ->group(function () {
+            Route::post('/preview', 'preview');
+            Route::post('/commit', 'commit');
+        });
 
 
 

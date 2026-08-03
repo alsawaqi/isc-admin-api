@@ -13,6 +13,9 @@ RUN apt-get update && apt-get install -y \
     lsb-release \
     libxml2-dev \
     libssl-dev \
+    libzip-dev \
+    libicu-dev \
+    libsqlite3-dev \
     zip unzip git \
     build-essential autoconf \
     && apt-get upgrade -y \
@@ -37,7 +40,7 @@ RUN pecl install pdo_sqlsrv sqlsrv \
     && docker-php-ext-enable pdo_sqlsrv sqlsrv
 
 # ✅ Install default PHP extensions
-RUN docker-php-ext-install pdo opcache
+RUN docker-php-ext-install pdo opcache zip intl pdo_sqlite
 
 # ✅ ADD THIS: install pcntl so Reverb can catch signals
 RUN docker-php-ext-install pcntl
