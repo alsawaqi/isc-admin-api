@@ -60,30 +60,42 @@ jobs:
             "set -eu; tmp=\$(mktemp /tmp/isc-admin-ui-deploy.XXXXXX); trap 'rm -f \"\$tmp\"' 0; cat > \"\$tmp\"; chmod 700 \"\$tmp\"; flock -w 3000 /home/abdallah/.production-deploy.lock bash -- \"\$tmp\" '$ADMIN_SHA'" <<'REMOTE'
           set -Eeuo pipefail
           deploy_sha="$1"
-          test "${#deploy_sha}" -eq 40
+          fail() {
+            echo "$1" >&2
+            exit "${2:-1}"
+          }
+
+          test "${#deploy_sha}" -eq 40 || fail "Invalid admin UI deployment SHA."
           case "$deploy_sha" in *[!0-9a-f]*) exit 2 ;; esac
 
           app_dir=/home/abdallah/apps/isc-admin-ui
-          test -d "$app_dir/.git"
+          test -d "$app_dir/.git" || fail "Admin UI checkout was not found at the expected VPS path."
           cd "$app_dir"
 
           remote_url="$(git remote get-url origin)"
           case "$remote_url" in
             *github.com/alsawaqi/isc-admin-ui.git|*github.com:alsawaqi/isc-admin-ui.git) ;;
-            *) echo "Unexpected admin UI origin." >&2; exit 3 ;;
+            *) fail "Unexpected admin UI origin." 3 ;;
           esac
 
-          test "$(git branch --show-current)" = "main"
-          test -z "$(git status --porcelain --untracked-files=all)"
-          test -f .env.production
+          test "$(git branch --show-current)" = "main" || \
+            fail "Admin UI checkout is not on its main branch."
+          test -z "$(git status --porcelain --untracked-files=all)" || \
+            fail "Admin UI checkout has uncommitted files; deployment stopped safely."
+          test -f .env.production || \
+            fail "Admin UI production environment file is missing."
 
           git fetch origin main
           git cat-file -e "$deploy_sha^{commit}"
-          test "$(git rev-parse origin/main)" = "$deploy_sha"
-          git merge-base --is-ancestor HEAD "$deploy_sha"
+          test "$(git rev-parse origin/main)" = "$deploy_sha" || \
+            fail "Requested admin UI SHA is not the current origin/main."
+          git merge-base --is-ancestor HEAD "$deploy_sha" || \
+            fail "Admin UI checkout cannot be fast-forwarded to the requested SHA."
           git merge --ff-only origin/main
-          test "$(git rev-parse HEAD)" = "$deploy_sha"
-          test -z "$(git status --porcelain --untracked-files=all)"
+          test "$(git rev-parse HEAD)" = "$deploy_sha" || \
+            fail "Admin UI checkout did not reach the requested SHA."
+          test -z "$(git status --porcelain --untracked-files=all)" || \
+            fail "Admin UI checkout changed unexpectedly during deployment."
 
           compose=(docker compose --env-file .env.production -f docker-compose.prod.yml)
           "${compose[@]}" config --quiet
