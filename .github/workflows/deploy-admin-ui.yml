@@ -78,26 +78,43 @@ jobs:
             *) fail "Unexpected admin UI origin." 3 ;;
           esac
 
-          test "$(git branch --show-current)" = "main" || \
-            fail "Admin UI checkout is not on its main branch."
-          test -z "$(git status --porcelain --untracked-files=all)" || \
-            fail "Admin UI checkout has uncommitted files; deployment stopped safely."
-          test -f .env.production || \
+          test -f "$app_dir/.env.production" || \
             fail "Admin UI production environment file is missing."
 
-          git fetch origin main
-          git cat-file -e "$deploy_sha^{commit}"
-          test "$(git rev-parse origin/main)" = "$deploy_sha" || \
+          git -C "$app_dir" fetch origin main
+          git -C "$app_dir" cat-file -e "$deploy_sha^{commit}"
+          test "$(git -C "$app_dir" rev-parse origin/main)" = "$deploy_sha" || \
             fail "Requested admin UI SHA is not the current origin/main."
-          git merge-base --is-ancestor HEAD "$deploy_sha" || \
-            fail "Admin UI checkout cannot be fast-forwarded to the requested SHA."
-          git merge --ff-only origin/main
-          test "$(git rev-parse HEAD)" = "$deploy_sha" || \
-            fail "Admin UI checkout did not reach the requested SHA."
-          test -z "$(git status --porcelain --untracked-files=all)" || \
-            fail "Admin UI checkout changed unexpectedly during deployment."
 
-          compose=(docker compose --env-file .env.production -f docker-compose.prod.yml)
+          release_root=/home/abdallah/apps/.isc-admin-ui-releases
+          release_dir="$release_root/$deploy_sha"
+          mkdir -p "$release_root"
+
+          if test -e "$release_dir"; then
+            test -e "$release_dir/.git" || \
+              fail "Existing admin UI release path is not a Git worktree."
+          else
+            git -C "$app_dir" worktree add --detach "$release_dir" "$deploy_sha"
+          fi
+
+          test "$(git -C "$release_dir" rev-parse HEAD)" = "$deploy_sha" || \
+            fail "Admin UI release worktree has an unexpected SHA."
+          test -z "$(git -C "$release_dir" status --porcelain --untracked-files=all)" || \
+            fail "Admin UI release worktree is not clean."
+
+          project_name="$(docker inspect --format \
+            '{{ index .Config.Labels "com.docker.compose.project" }}' \
+            nuxt-ssr 2> /dev/null || true)"
+          test -n "$project_name" || project_name=isc-admin-ui
+          case "$project_name" in
+            *[!a-z0-9_-]*) fail "Unsafe Docker Compose project name." ;;
+          esac
+
+          compose=(docker compose
+            --project-name "$project_name"
+            --project-directory "$release_dir"
+            --env-file "$app_dir/.env.production"
+            -f "$release_dir/docker-compose.prod.yml")
           "${compose[@]}" config --quiet
           "${compose[@]}" build nuxt
           "${compose[@]}" up -d --force-recreate nuxt nginx
