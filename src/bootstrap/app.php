@@ -1,6 +1,7 @@
 <?php
 
  
+use App\Support\ApiExceptionResponse;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -38,9 +39,12 @@ return Application::configure(basePath: dirname(__DIR__))
     if ($request->expectsJson()) {
         $payload = [
             'success' => false,
-            'message' => $isDebug ? $e->getMessage() : 'Server Error',
-            'trace' => $isDebug ? $e->getTrace() : null,
+            'message' => ApiExceptionResponse::message($e, $statusCode, $isDebug),
         ];
+
+        if ($isDebug) {
+            $payload['trace'] = $e->getTrace();
+        }
 
         if ($e instanceof ValidationException) {
             $payload['errors'] = $e->errors();

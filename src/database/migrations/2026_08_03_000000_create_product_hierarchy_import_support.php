@@ -348,16 +348,30 @@ return new class extends Migration
 
     private function createPermissionAndCloneAccess(): void
     {
+        $departmentPermission = DB::table('Security_Permissions_T')
+            ->where('name', 'departments')
+            ->first(['id', 'guard_name']);
+        $guardName = trim((string) ($departmentPermission->guard_name ?? ''));
+        if ($guardName === '') {
+            $guardName = (string) config('auth.defaults.guard', 'web');
+        }
+
         $permission = DB::table('Security_Permissions_T')->where('name', 'import product categories')->first();
         if (! $permission) {
             $id = DB::table('Security_Permissions_T')->insertGetId([
-                'name' => 'import product categories', 'guard_name' => 'sanctum', 'created_at' => now(), 'updated_at' => now(),
+                'name' => 'import product categories', 'guard_name' => $guardName, 'created_at' => now(), 'updated_at' => now(),
             ]);
         } else {
             $id = $permission->id;
+            if ((string) $permission->guard_name !== $guardName) {
+                DB::table('Security_Permissions_T')->where('id', $id)->update([
+                    'guard_name' => $guardName,
+                    'updated_at' => now(),
+                ]);
+            }
         }
 
-        $departmentPermissionId = DB::table('Security_Permissions_T')->where('name', 'departments')->value('id');
+        $departmentPermissionId = $departmentPermission->id ?? null;
         if (! $departmentPermissionId) {
             app(PermissionRegistrar::class)->forgetCachedPermissions();
 

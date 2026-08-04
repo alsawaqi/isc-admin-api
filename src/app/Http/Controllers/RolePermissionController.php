@@ -3,13 +3,12 @@
 namespace App\Http\Controllers;
 
 
-use Spatie\Permission\Models\Role;
 use Illuminate\Support\Facades\DB;
 use App\Models\SecurityRole;
 use App\Models\SecurityPermission;
-use Spatie\Permission\Models\Permission;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Spatie\Permission\PermissionRegistrar;
 
 class RolePermissionController extends Controller
 {
@@ -61,9 +60,11 @@ class RolePermissionController extends Controller
             'permissions.*' => 'exists:Security_Permissions_T,name',
         ]);
 
+        $guardName = SecurityPermission::where('name', 'departments')->value('guard_name')
+            ?: config('auth.defaults.guard', 'web');
         $role = SecurityRole::create([
             'name' => $validated['name'],
-            'guard_name' => 'sanctum'
+            'guard_name' => $guardName,
         ]);
 
         $permissions = SecurityPermission::whereIn('name', $validated['permissions'])->pluck('id');
@@ -74,6 +75,7 @@ class RolePermissionController extends Controller
         ])->toArray();
 
         DB::table('Security_Role_Has_Permissions_T')->insert($pivotData);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         return response()->json([
             'message' => 'Role and permissions created successfully',
@@ -86,7 +88,13 @@ class RolePermissionController extends Controller
     {
         $request->validate(['name' => 'required|string|unique:Security_Permissions_T,name']);
 
-        $permission = Permission::create(['name' => $request->name]);
+        $guardName = SecurityPermission::where('name', 'departments')->value('guard_name')
+            ?: config('auth.defaults.guard', 'web');
+        $permission = SecurityPermission::create([
+            'name' => $request->name,
+            'guard_name' => $guardName,
+        ]);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
         return response()->json($permission, 201);
     }
 
@@ -119,6 +127,8 @@ class RolePermissionController extends Controller
                 'model_id'   => $user->id,
             ]);
         }
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         return response()->json(['message' => 'Role assigned successfully'], 200);
     }
@@ -158,6 +168,8 @@ class RolePermissionController extends Controller
 
             DB::table('Security_Role_Has_Permissions_T')->insert($insert);
         });
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
         return response()->json(['message' => 'Permissions updated successfully']);
     }
 
@@ -166,6 +178,7 @@ class RolePermissionController extends Controller
     {
         $role = SecurityRole::findOrFail($id);
         $role->delete();
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         return response()->json(['message' => 'Role deleted successfully']);
     }
