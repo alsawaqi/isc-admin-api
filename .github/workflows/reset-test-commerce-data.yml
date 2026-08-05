@@ -162,7 +162,15 @@ jobs:
           docker exec -u 0 mssql-server sh -c \
             'mkdir -p /var/opt/mssql/backup && chown mssql:mssql /var/opt/mssql/backup && chmod 700 /var/opt/mssql/backup'
 
-          docker exec -e BACKUP_PATH="$backup_container_path" mssql-server bash -lc '
+          compressed_backup_query="BACKUP DATABASE [isc] TO DISK = N'${backup_container_path}' WITH COPY_ONLY, INIT, COMPRESSION, CHECKSUM, STATS = 10"
+          uncompressed_backup_query="BACKUP DATABASE [isc] TO DISK = N'${backup_container_path}' WITH COPY_ONLY, INIT, CHECKSUM, STATS = 10"
+          verify_backup_query="RESTORE VERIFYONLY FROM DISK = N'${backup_container_path}' WITH CHECKSUM"
+
+          docker exec \
+            -e COMPRESSED_BACKUP_QUERY="$compressed_backup_query" \
+            -e UNCOMPRESSED_BACKUP_QUERY="$uncompressed_backup_query" \
+            -e VERIFY_BACKUP_QUERY="$verify_backup_query" \
+            mssql-server bash -lc '
             set -Eeuo pipefail
             if test -x /opt/mssql-tools18/bin/sqlcmd; then
               sqlcmd=/opt/mssql-tools18/bin/sqlcmd
@@ -173,11 +181,11 @@ jobs:
               exit 3
             fi
             export SQLCMDPASSWORD="$MSSQL_SA_PASSWORD"
-            if ! "$sqlcmd" -C -b -S localhost -U sa -Q "BACKUP DATABASE [isc] TO DISK = N'${BACKUP_PATH}' WITH COPY_ONLY, INIT, COMPRESSION, CHECKSUM, STATS = 10"; then
+            if ! "$sqlcmd" -C -b -S localhost -U sa -Q "$COMPRESSED_BACKUP_QUERY"; then
               echo "Compressed backup was unavailable; retrying without compression." >&2
-              "$sqlcmd" -C -b -S localhost -U sa -Q "BACKUP DATABASE [isc] TO DISK = N'${BACKUP_PATH}' WITH COPY_ONLY, INIT, CHECKSUM, STATS = 10"
+              "$sqlcmd" -C -b -S localhost -U sa -Q "$UNCOMPRESSED_BACKUP_QUERY"
             fi
-            "$sqlcmd" -C -b -S localhost -U sa -Q "RESTORE VERIFYONLY FROM DISK = N'${BACKUP_PATH}' WITH CHECKSUM"
+            "$sqlcmd" -C -b -S localhost -U sa -Q "$VERIFY_BACKUP_QUERY"
             unset SQLCMDPASSWORD
           '
 
