@@ -1,0 +1,211 @@
+name: Reset test commerce data
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inspect first; execute requires a verified backup and typed confirmation
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - execute
+      confirm:
+        description: Type INSPECT-TEST-COMMERCE-DATA or DELETE-TEST-COMMERCE-DATA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-vps
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: production
+
+    steps:
+      - name: Validate request
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -Eeuo pipefail
+          case "$MODE" in
+            dry-run) test "$CONFIRM" = "INSPECT-TEST-COMMERCE-DATA" ;;
+            execute) test "$CONFIRM" = "DELETE-TEST-COMMERCE-DATA" ;;
+            *) exit 2 ;;
+          esac
+          test "$GITHUB_REF" = "refs/heads/master"
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: Inspect or reset test commerce data
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -i "$HOME/.ssh/id_ed25519" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" \
+            "set -eu; tmp=\$(mktemp /tmp/isc-commerce-reset.XXXXXX); trap 'rm -f \"\$tmp\"' 0; cat > \"\$tmp\"; chmod 700 \"\$tmp\"; flock -w 3000 /home/abdallah/.production-deploy.lock bash -- \"\$tmp\" '$MODE' '$CONFIRM'" <<'REMOTE'
+          set -Eeuo pipefail
+
+          mode="$1"
+          confirm="$2"
+          admin_dir=/home/abdallah/apps/isc-admin-api
+          customer_dir=/home/abdallah/apps/laravel-api
+          vendor_dir=/home/abdallah/apps/isc-multivendor-api
+
+          test -f "$admin_dir/docker-compose.prod.yml"
+          cd "$admin_dir"
+          test "$(git branch --show-current)" = "master"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          git fetch origin master
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)"
+
+          docker compose -f docker-compose.prod.yml exec -T laravel-app \
+            php artisan list --raw | grep -Eq '^commerce:reset-test-data[[:space:]]'
+
+          if test "$mode" = dry-run; then
+            test "$confirm" = INSPECT-TEST-COMMERCE-DATA
+            docker compose -f docker-compose.prod.yml exec -T laravel-app \
+              php artisan commerce:reset-test-data --database=isc
+            exit 0
+          fi
+
+          test "$mode" = execute
+          test "$confirm" = DELETE-TEST-COMMERCE-DATA
+
+          customer_app_running=0
+          vendor_app_running=0
+          customer_worker_running=0
+          customer_scheduler_running=0
+
+          service_is_running() {
+            local directory="$1"
+            local service="$2"
+            test -f "$directory/docker-compose.prod.yml" || return 1
+            docker compose -f "$directory/docker-compose.prod.yml" ps --status running --services | grep -Fqx "$service"
+          }
+
+          if service_is_running "$customer_dir" laravel-app-api; then
+            customer_app_running=1
+          fi
+          if service_is_running "$vendor_dir" laravel-muiltivendor-app; then
+            vendor_app_running=1
+          fi
+          if service_is_running "$customer_dir" queue-worker; then
+            customer_worker_running=1
+          fi
+          if service_is_running "$customer_dir" scheduler; then
+            customer_scheduler_running=1
+          fi
+
+          restore_services() (
+            set +e
+            if test "$customer_app_running" -eq 1; then
+              docker compose -f "$customer_dir/docker-compose.prod.yml" exec -T laravel-app-api php artisan up
+            fi
+            if test "$vendor_app_running" -eq 1; then
+              docker compose -f "$vendor_dir/docker-compose.prod.yml" exec -T laravel-muiltivendor-app php artisan up
+            fi
+            docker compose -f "$admin_dir/docker-compose.prod.yml" exec -T laravel-app php artisan up
+            if test "$customer_worker_running" -eq 1; then
+              docker compose -f "$customer_dir/docker-compose.prod.yml" up -d queue-worker
+            fi
+            if test "$customer_scheduler_running" -eq 1; then
+              docker compose -f "$customer_dir/docker-compose.prod.yml" up -d scheduler
+            fi
+          )
+          trap restore_services EXIT
+
+          if test "$customer_worker_running" -eq 1; then
+            docker compose -f "$customer_dir/docker-compose.prod.yml" stop queue-worker
+          fi
+          if test "$customer_scheduler_running" -eq 1; then
+            docker compose -f "$customer_dir/docker-compose.prod.yml" stop scheduler
+          fi
+          if test "$customer_app_running" -eq 1; then
+            docker compose -f "$customer_dir/docker-compose.prod.yml" exec -T laravel-app-api php artisan down --retry=60
+          fi
+          if test "$vendor_app_running" -eq 1; then
+            docker compose -f "$vendor_dir/docker-compose.prod.yml" exec -T laravel-muiltivendor-app php artisan down --retry=60
+          fi
+          docker compose -f "$admin_dir/docker-compose.prod.yml" exec -T laravel-app php artisan down --retry=60
+
+          docker inspect mssql-server > /dev/null
+          timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          backup_name="isc-pre-commerce-reset-${timestamp}.bak"
+          backup_container_path="/var/opt/mssql/backup/${backup_name}"
+          backup_host_dir=/home/abdallah/backups/isc
+          backup_host_path="${backup_host_dir}/${backup_name}"
+
+          install -d -m 700 "$backup_host_dir"
+          docker exec -u 0 mssql-server sh -c \
+            'mkdir -p /var/opt/mssql/backup && chown mssql:mssql /var/opt/mssql/backup && chmod 700 /var/opt/mssql/backup'
+
+          docker exec -e BACKUP_PATH="$backup_container_path" mssql-server bash -lc '
+            set -Eeuo pipefail
+            if test -x /opt/mssql-tools18/bin/sqlcmd; then
+              sqlcmd=/opt/mssql-tools18/bin/sqlcmd
+            elif test -x /opt/mssql-tools/bin/sqlcmd; then
+              sqlcmd=/opt/mssql-tools/bin/sqlcmd
+            else
+              echo "sqlcmd is not installed in the SQL Server container" >&2
+              exit 3
+            fi
+            export SQLCMDPASSWORD="$MSSQL_SA_PASSWORD"
+            if ! "$sqlcmd" -C -b -S localhost -U sa -Q "BACKUP DATABASE [isc] TO DISK = N'${BACKUP_PATH}' WITH COPY_ONLY, INIT, COMPRESSION, CHECKSUM, STATS = 10"; then
+              echo "Compressed backup was unavailable; retrying without compression." >&2
+              "$sqlcmd" -C -b -S localhost -U sa -Q "BACKUP DATABASE [isc] TO DISK = N'${BACKUP_PATH}' WITH COPY_ONLY, INIT, CHECKSUM, STATS = 10"
+            fi
+            "$sqlcmd" -C -b -S localhost -U sa -Q "RESTORE VERIFYONLY FROM DISK = N'${BACKUP_PATH}' WITH CHECKSUM"
+            unset SQLCMDPASSWORD
+          '
+
+          docker cp "mssql-server:${backup_container_path}" "$backup_host_path"
+          chmod 600 "$backup_host_path"
+          test -s "$backup_host_path"
+          backup_bytes="$(stat -c %s "$backup_host_path")"
+          backup_sha256="$(sha256sum "$backup_host_path" | awk '{print $1}')"
+          echo "Verified pre-reset backup: ${backup_host_path} (${backup_bytes} bytes, sha256 ${backup_sha256})"
+
+          docker compose -f "$admin_dir/docker-compose.prod.yml" exec -T laravel-app \
+            php artisan commerce:reset-test-data \
+              --database=isc \
+              --execute \
+              --confirm=DELETE-TEST-COMMERCE-DATA
+
+          docker compose -f "$admin_dir/docker-compose.prod.yml" exec -T laravel-app php artisan cache:clear
+          if test "$customer_app_running" -eq 1; then
+            docker compose -f "$customer_dir/docker-compose.prod.yml" exec -T laravel-app-api php artisan cache:clear
+          fi
+          if test "$vendor_app_running" -eq 1; then
+            docker compose -f "$vendor_dir/docker-compose.prod.yml" exec -T laravel-muiltivendor-app php artisan cache:clear
+          fi
+
+          restore_services
+          trap - EXIT
+
+          curl -fsS --retry 5 --retry-delay 2 --retry-all-errors \
+            --max-time 20 https://api.avinaq.com/up > /dev/null
+          echo "Test commerce reset and post-reset health check completed."
+          REMOTE
