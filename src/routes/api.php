@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Admin\VendorOrdersController;
+use App\Http\Controllers\AdminCustomerNotificationController;
 use App\Http\Controllers\AdminTempProductController;
 use App\Http\Controllers\CityController;
 use App\Http\Controllers\ContactDepartmentsController;
@@ -7,6 +9,7 @@ use App\Http\Controllers\CountryController;
 use App\Http\Controllers\CustomersController;
 use App\Http\Controllers\CustomerTypeController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DesignationsController;
 use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\HeavyRateController;
 use App\Http\Controllers\HeavyVehicleController;
@@ -14,21 +17,20 @@ use App\Http\Controllers\LocationsController;
 use App\Http\Controllers\LoyalityPointsController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NotificationDeviceController;
-use App\Http\Controllers\AdminCustomerNotificationController;
-use App\Http\Controllers\OrdersPlacedController;
 use App\Http\Controllers\OperationsReportController;
+use App\Http\Controllers\OrdersPlacedController;
 use App\Http\Controllers\ProductBrandsController;
 use App\Http\Controllers\ProductDepartmentsController;
-use App\Http\Controllers\ProductHierarchyImportController;
 use App\Http\Controllers\ProductDiscountController;
 use App\Http\Controllers\ProductEngagementAdminController;
+use App\Http\Controllers\ProductHierarchyImportController;
 use App\Http\Controllers\ProductImagesController;
 use App\Http\Controllers\ProductManufactureController;
 use App\Http\Controllers\ProductMasterController;
-use App\Http\Controllers\ProductStockController;
 use App\Http\Controllers\ProductsBarcodesController;
 use App\Http\Controllers\ProductSpecificationDescriptionController;
 use App\Http\Controllers\ProductSpecificationProductController;
+use App\Http\Controllers\ProductStockController;
 use App\Http\Controllers\ProductSubDepartmentController;
 use App\Http\Controllers\ProductSubSubDepartmentController;
 use App\Http\Controllers\ProductTypesController;
@@ -43,17 +45,14 @@ use App\Http\Controllers\ShipperWeightRateController;
 use App\Http\Controllers\StateController;
 use App\Http\Controllers\SupportTicketAdminController;
 use App\Http\Controllers\TitlesController;
-use App\Http\Controllers\DesignationsController;
+use App\Http\Controllers\UiSlidersController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VatController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\VendorUserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
 use Laravel\Fortify\RoutePath;
-use App\Http\Controllers\Admin\VendorOrdersController;
-use App\Http\Controllers\UiSlidersController;
 
 Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::get('/user', function (Request $request) {
@@ -125,11 +124,12 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         ->prefix('product-hierarchy-import')
         ->middleware('throttle:6,1')
         ->group(function () {
+            Route::get('/history', 'history');
+            Route::get('/export', 'export');
             Route::post('/preview', 'preview');
             Route::post('/commit', 'commit');
+            Route::post('/{job}/rollback', 'rollback');
         });
-
-
 
     Route::controller(UiSlidersController::class)->group(function () {
         Route::get('/ui-sliders', 'index');
@@ -164,8 +164,8 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::post('/product-images/{product}', 'uploadImages');
         Route::get('/product-images/{product}', 'getImages');
 
-         // ✅ NEW
-    Route::delete('/product-images/{image}', 'destroy');
+        // ✅ NEW
+        Route::delete('/product-images/{image}', 'destroy');
     });
 
     Route::controller(ProductMasterController::class)->group(function () {
@@ -225,7 +225,6 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::put('/customer-types/{customertype}', 'update');
         Route::delete('/customer-types/{customertype}', 'destroy');
     });
-
 
     Route::prefix('admin')->group(function () {
         // Vendor self-registration requests (approve/reject reuses PATCH /vendors/{id}/approval)

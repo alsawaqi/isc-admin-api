@@ -11,7 +11,8 @@ class ProductHierarchyImportJob extends Model
     protected $fillable = [
         'Token', 'User_Id', 'File_Name', 'File_Size', 'File_Sha256',
         'Payload_Digest', 'Canonical_Payload', 'Summary', 'Status',
-        'Can_Commit', 'Expires_At', 'Committed_At', 'Result',
+        'Can_Commit', 'Expires_At', 'Committed_At', 'Rolled_Back_At',
+        'Rolled_Back_By', 'Result',
     ];
 
     protected function casts(): array
@@ -20,6 +21,7 @@ class ProductHierarchyImportJob extends Model
             'Can_Commit' => 'boolean',
             'Expires_At' => 'datetime',
             'Committed_At' => 'datetime',
+            'Rolled_Back_At' => 'datetime',
         ];
     }
 

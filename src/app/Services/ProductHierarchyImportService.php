@@ -11,12 +11,15 @@ use App\Support\ProductHierarchyCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use RuntimeException;
 
 class ProductHierarchyImportService
 {
+    private const CREATED_ID_KEYS = ['departments', 'sub_departments', 'sub_sub_departments'];
+
     /** @return array<string, mixed> */
     public function analyze(array $parsed): array
     {
@@ -492,12 +495,100 @@ class ProductHierarchyImportService
         return $result;
     }
 
+    /** @return array<int, array<string, mixed>> */
+    public function history(int $limit = 25): array
+    {
+        $limit = max(1, min($limit, 100));
+
+        return ProductHierarchyImportJob::query()
+            ->latest('id')
+            ->limit($limit)
+            ->get()
+            ->map(fn (ProductHierarchyImportJob $job): array => $this->publicJob($job))
+            ->all();
+    }
+
+    /** @return array<string, mixed> */
+    public function rollback(int $jobId, int $userId): array
+    {
+        $result = DB::transaction(function () use ($jobId, $userId) {
+            $job = ProductHierarchyImportJob::query()->whereKey($jobId)->lockForUpdate()->first();
+            if (! $job) {
+                throw new RuntimeException('The import batch was not found.', 404);
+            }
+
+            $result = $this->decodeJsonObject($job->Result);
+            if ($job->Status === 'rolled_back') {
+                return $result['rollback'] ?? [
+                    'job' => $this->publicJob($job),
+                    'already_rolled_back' => true,
+                ];
+            }
+            if ($job->Status !== 'committed') {
+                throw new RuntimeException('Only committed hierarchy imports can be rolled back.', 409);
+            }
+            if (! $this->hasRollbackTracking($result)) {
+                throw new RuntimeException('This import was committed before rollback tracking was available.', 422);
+            }
+
+            $this->acquireImportLock();
+
+            $createdIds = $this->normaliseTrackedIds($result['created_ids'] ?? []);
+            $linkedRecords = $this->normaliseLinkedRecords($result['linked_records'] ?? []);
+
+            $this->assertRollbackHasNoBusinessReferences($createdIds);
+            $deleted = [
+                'sub_sub_departments' => $this->deleteTrackedRows(
+                    'Products_Sub_Sub_Department_T',
+                    $createdIds['sub_sub_departments'],
+                    'sub-sub-department',
+                ),
+                'sub_departments' => $this->deleteTrackedRows(
+                    'Products_Sub_Department_T',
+                    $createdIds['sub_departments'],
+                    'sub-department',
+                ),
+                'departments' => $this->deleteTrackedRows(
+                    'Products_Departments_T',
+                    $createdIds['departments'],
+                    'department',
+                ),
+            ];
+            $metadataCleared = $this->rollbackLinkedMetadata($linkedRecords);
+
+            $rollback = [
+                'job_id' => (int) $job->id,
+                'rolled_back_by' => $userId,
+                'rolled_back_at' => now()->toIso8601String(),
+                'deleted' => $deleted,
+                'metadata_cleared' => $metadataCleared,
+            ];
+            $result['rollback'] = $rollback;
+
+            $job->update([
+                'Status' => 'rolled_back',
+                'Rolled_Back_At' => now(),
+                'Rolled_Back_By' => $userId,
+                'Result' => json_encode($result, JSON_THROW_ON_ERROR),
+            ]);
+
+            return [
+                ...$rollback,
+                'job' => $this->publicJob($job->refresh()),
+            ];
+        }, 3);
+
+        return $result;
+    }
+
     /** @param array<string, array<string, mixed>> $plan */
     private function applyPlan(array $plan, int $userId, string $codePeriod): array
     {
         $created = ['departments' => 0, 'sub_departments' => 0, 'sub_sub_departments' => 0];
         $skipped = ['departments' => 0, 'sub_departments' => 0, 'sub_sub_departments' => 0];
         $linked = ['departments' => 0, 'sub_departments' => 0, 'sub_sub_departments' => 0];
+        $createdIds = ['departments' => [], 'sub_departments' => [], 'sub_sub_departments' => []];
+        $linkedRecords = ['departments' => [], 'sub_departments' => [], 'sub_sub_departments' => []];
 
         foreach ($plan as $department) {
             if ($department['status'] === 'conflict') {
@@ -514,6 +605,10 @@ class ProductHierarchyImportService
                 if ($department['link_fields'] !== []) {
                     $this->linkDepartmentMetadata($departmentModel, $department);
                     $linked['departments']++;
+                    $linkedRecords['departments'][] = [
+                        'id' => (int) $departmentModel->id,
+                        'fields' => $this->departmentLinkedFields($department),
+                    ];
                 }
             } else {
                 $departmentModel = ProductDepartments::create([
@@ -527,6 +622,7 @@ class ProductHierarchyImportService
                     'Created_By' => $userId,
                 ]);
                 $created['departments']++;
+                $createdIds['departments'][] = (int) $departmentModel->id;
             }
 
             foreach ($department['sub_departments'] as $sub) {
@@ -553,6 +649,10 @@ class ProductHierarchyImportService
                     if ($sub['link_fields'] !== []) {
                         $this->linkSequenceMetadata($subModel, 'Source_Sub_Sequence', $sub['sub_sequence']);
                         $linked['sub_departments']++;
+                        $linkedRecords['sub_departments'][] = [
+                            'id' => (int) $subModel->id,
+                            'fields' => ['Source_Sub_Sequence' => (int) $sub['sub_sequence']],
+                        ];
                     }
                 } else {
                     $subModel = ProductSubDepartment::create([
@@ -565,6 +665,7 @@ class ProductHierarchyImportService
                         'Created_By' => $userId,
                     ]);
                     $created['sub_departments']++;
+                    $createdIds['sub_departments'][] = (int) $subModel->id;
                 }
 
                 foreach ($sub['sub_sub_departments'] as $leaf) {
@@ -592,9 +693,13 @@ class ProductHierarchyImportService
                         if ($leaf['link_fields'] !== []) {
                             $this->linkSequenceMetadata($leafModel, 'Source_Sub_Sub_Sequence', $leaf['sub_sub_sequence']);
                             $linked['sub_sub_departments']++;
+                            $linkedRecords['sub_sub_departments'][] = [
+                                'id' => (int) $leafModel->id,
+                                'fields' => ['Source_Sub_Sub_Sequence' => (int) $leaf['sub_sub_sequence']],
+                            ];
                         }
                     } else {
-                        ProductSubSubDepartment::create([
+                        $leafModel = ProductSubSubDepartment::create([
                             'Product_Sub_Department_Id' => $subModel->id,
                             'Product_Sub_Sub_Department_Code' => $leaf['canonical_code'],
                             'Source_Sub_Sub_Sequence' => $leaf['sub_sub_sequence'],
@@ -605,6 +710,7 @@ class ProductHierarchyImportService
                             'Created_By' => $userId,
                         ]);
                         $created['sub_sub_departments']++;
+                        $createdIds['sub_sub_departments'][] = (int) $leafModel->id;
                     }
                 }
             }
@@ -615,8 +721,234 @@ class ProductHierarchyImportService
             'created' => $created,
             'skipped' => $skipped,
             'linked' => $linked,
+            'created_ids' => $createdIds,
+            'linked_records' => $linkedRecords,
             'errors' => 0,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private function publicJob(ProductHierarchyImportJob $job): array
+    {
+        $summary = $this->decodeJsonObject($job->Summary);
+        $result = $this->decodeJsonObject($job->Result);
+
+        return [
+            'id' => (int) $job->id,
+            'file_name' => $job->File_Name,
+            'file_size' => (int) $job->File_Size,
+            'file_sha256' => $job->File_Sha256,
+            'status' => $job->Status,
+            'can_commit' => (bool) $job->Can_Commit,
+            'can_rollback' => $job->Status === 'committed' && $this->hasRollbackTracking($result),
+            'code_period' => $result['code_period'] ?? $summary['code_period'] ?? null,
+            'summary' => $summary,
+            'result' => [
+                'created' => $result['created'] ?? null,
+                'skipped' => $result['skipped'] ?? null,
+                'linked' => $result['linked'] ?? null,
+                'rollback' => $result['rollback'] ?? null,
+            ],
+            'expires_at' => $job->Expires_At?->toIso8601String(),
+            'committed_at' => $job->Committed_At?->toIso8601String(),
+            'rolled_back_at' => $job->Rolled_Back_At?->toIso8601String(),
+            'created_at' => $job->created_at?->toIso8601String(),
+            'updated_at' => $job->updated_at?->toIso8601String(),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function decodeJsonObject(?string $json): array
+    {
+        if ($json === null || trim($json) === '') {
+            return [];
+        }
+
+        try {
+            $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return [];
+        }
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function hasRollbackTracking(array $result): bool
+    {
+        return array_key_exists('created_ids', $result)
+            && array_key_exists('linked_records', $result);
+    }
+
+    /** @return array<string, array<int, int>> */
+    private function normaliseTrackedIds(array $createdIds): array
+    {
+        $normalised = [];
+        foreach (self::CREATED_ID_KEYS as $key) {
+            $normalised[$key] = array_values(array_unique(array_filter(array_map(
+                static fn (mixed $id): int => (int) $id,
+                is_array($createdIds[$key] ?? null) ? $createdIds[$key] : [],
+            ), static fn (int $id): bool => $id > 0)));
+        }
+
+        return $normalised;
+    }
+
+    /** @return array<string, array<int, array{id: int, fields: array<string, mixed>}>> */
+    private function normaliseLinkedRecords(array $records): array
+    {
+        $normalised = [];
+        foreach (self::CREATED_ID_KEYS as $key) {
+            $normalised[$key] = [];
+            foreach (is_array($records[$key] ?? null) ? $records[$key] : [] as $record) {
+                $id = (int) ($record['id'] ?? 0);
+                $fields = is_array($record['fields'] ?? null) ? $record['fields'] : [];
+                if ($id > 0 && $fields !== []) {
+                    $normalised[$key][] = compact('id', 'fields');
+                }
+            }
+        }
+
+        return $normalised;
+    }
+
+    /** @param array<string, array<int, int>> $createdIds */
+    private function assertRollbackHasNoBusinessReferences(array $createdIds): void
+    {
+        $this->assertNoUnexpectedChildren(
+            'Products_Sub_Department_T',
+            'Products_Departments_Id',
+            $createdIds['departments'],
+            $createdIds['sub_departments'],
+            'sub-departments added after this import',
+        );
+        $this->assertNoUnexpectedChildren(
+            'Products_Sub_Sub_Department_T',
+            'Product_Sub_Department_Id',
+            $createdIds['sub_departments'],
+            $createdIds['sub_sub_departments'],
+            'sub-sub-departments added after this import',
+        );
+
+        foreach ([
+            ['Products_Master_T', 'Product_Department_Id', $createdIds['departments'], 'products linked to imported departments'],
+            ['Products_Master_T', 'Product_Sub_Department_Id', $createdIds['sub_departments'], 'products linked to imported sub-departments'],
+            ['Products_Master_T', 'Product_Sub_Sub_Department_Id', $createdIds['sub_sub_departments'], 'products linked to imported sub-sub-departments'],
+            ['Products_Temporary_T', 'Product_Department_Id', $createdIds['departments'], 'temporary vendor products linked to imported departments'],
+            ['Products_Temporary_T', 'Product_Sub_Department_Id', $createdIds['sub_departments'], 'temporary vendor products linked to imported sub-departments'],
+            ['Products_Temporary_T', 'Product_Sub_Sub_Department_Id', $createdIds['sub_sub_departments'], 'temporary vendor products linked to imported sub-sub-departments'],
+            ['Products_Discounts_T', 'Product_Department_Id', $createdIds['departments'], 'discounts linked to imported departments'],
+            ['Products_Discounts_T', 'Product_Sub_Department_Id', $createdIds['sub_departments'], 'discounts linked to imported sub-departments'],
+            ['Products_Discounts_T', 'Product_Sub_Sub_Department_Id', $createdIds['sub_sub_departments'], 'discounts linked to imported sub-sub-departments'],
+            ['Products_Manufacture_Master_T', 'Product_Department_Id', $createdIds['departments'], 'manufacturers linked to imported departments'],
+        ] as [$table, $column, $ids, $message]) {
+            $this->assertNoReferences($table, $column, $ids, $message);
+        }
+    }
+
+    /** @param array<int, int> $parentIds @param array<int, int> $expectedChildIds */
+    private function assertNoUnexpectedChildren(
+        string $table,
+        string $parentColumn,
+        array $parentIds,
+        array $expectedChildIds,
+        string $message
+    ): void {
+        if ($parentIds === [] || ! Schema::hasTable($table) || ! Schema::hasColumn($table, $parentColumn)) {
+            return;
+        }
+
+        $query = DB::table($table)->whereIn($parentColumn, $parentIds);
+        if ($expectedChildIds !== []) {
+            $query->whereNotIn('id', $expectedChildIds);
+        }
+
+        if ($query->exists()) {
+            throw new RuntimeException('Cannot roll back this import because it has '.$message.'.', 409);
+        }
+    }
+
+    /** @param array<int, int> $ids */
+    private function assertNoReferences(string $table, string $column, array $ids, string $message): void
+    {
+        if ($ids === [] || ! Schema::hasTable($table) || ! Schema::hasColumn($table, $column)) {
+            return;
+        }
+
+        if (DB::table($table)->whereIn($column, $ids)->exists()) {
+            throw new RuntimeException('Cannot roll back this import because it has '.$message.'.', 409);
+        }
+    }
+
+    /** @param array<int, int> $ids */
+    private function deleteTrackedRows(string $table, array $ids, string $label): int
+    {
+        if ($ids === []) {
+            return 0;
+        }
+
+        $existing = DB::table($table)->whereIn('id', $ids)->count();
+        if ((int) $existing !== count($ids)) {
+            throw new RuntimeException('Cannot roll back this import because an imported '.$label.' was changed or removed manually.', 409);
+        }
+
+        return DB::table($table)->whereIn('id', $ids)->delete();
+    }
+
+    /**
+     * @param  array<string, array<int, array{id: int, fields: array<string, mixed>}>>  $records
+     * @return array<string, int>
+     */
+    private function rollbackLinkedMetadata(array $records): array
+    {
+        $cleared = ['departments' => 0, 'sub_departments' => 0, 'sub_sub_departments' => 0];
+        foreach ([
+            'departments' => 'Products_Departments_T',
+            'sub_departments' => 'Products_Sub_Department_T',
+            'sub_sub_departments' => 'Products_Sub_Sub_Department_T',
+        ] as $key => $table) {
+            foreach ($records[$key] as $record) {
+                $row = DB::table($table)->where('id', $record['id'])->lockForUpdate()->first();
+                if (! $row) {
+                    throw new RuntimeException('Cannot roll back this import because a linked category was removed manually.', 409);
+                }
+
+                foreach ($record['fields'] as $column => $expected) {
+                    if (! property_exists($row, $column) || ! $this->sameScalar($row->{$column}, $expected)) {
+                        throw new RuntimeException('Cannot roll back this import because linked category metadata changed after import.', 409);
+                    }
+                }
+
+                DB::table($table)->where('id', $record['id'])->update(array_fill_keys(array_keys($record['fields']), null));
+                $cleared[$key]++;
+            }
+        }
+
+        return $cleared;
+    }
+
+    private function sameScalar(mixed $actual, mixed $expected): bool
+    {
+        if (is_int($expected)) {
+            return (int) $actual === $expected;
+        }
+
+        return $this->nullableString($actual) === $this->nullableString($expected);
+    }
+
+    /** @return array<string, mixed> */
+    private function departmentLinkedFields(array $plan): array
+    {
+        $fields = [];
+        foreach ($plan['link_fields'] as $field) {
+            match ($field) {
+                'source_main_id' => $fields['Source_Main_Id'] = $plan['main_id'],
+                'source_main_sequence' => $fields['Source_Main_Sequence'] = (int) $plan['main_sequence'],
+                'hierarchy_code_period' => $fields['Hierarchy_Code_Period'] = $plan['code_period'],
+                default => throw new RuntimeException('The hierarchy plan contains an unknown department metadata field.', 409),
+            };
+        }
+
+        return $fields;
     }
 
     /** @return array<string, mixed> */

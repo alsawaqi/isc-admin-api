@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ProductHierarchyImportJob;
+use App\Services\ProductHierarchyExportService;
 use App\Services\ProductHierarchyImportService;
 use App\Services\ProductHierarchyXlsxParser;
 use App\Support\ProductHierarchyCode;
@@ -106,6 +107,64 @@ class ProductHierarchyImportController extends Controller
             'success' => true,
             'message' => 'Product hierarchy imported successfully.',
             'data' => $result,
+        ]);
+    }
+
+    public function history(Request $request, ProductHierarchyImportService $importer)
+    {
+        $this->authorizeImport($request);
+
+        $validated = $request->validate([
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'data' => $importer->history((int) ($validated['limit'] ?? 25)),
+        ]);
+    }
+
+    public function rollback(Request $request, ProductHierarchyImportService $importer, int $job)
+    {
+        $this->authorizeImport($request);
+
+        try {
+            $result = $importer->rollback($job, (int) $request->user()->id);
+        } catch (RuntimeException $exception) {
+            $status = in_array($exception->getCode(), [404, 409, 422], true) ? $exception->getCode() : 500;
+
+            return response()->json([
+                'success' => false,
+                'message' => $status === 500 ? 'The hierarchy import could not be rolled back.' : $exception->getMessage(),
+            ], $status);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Product hierarchy import rolled back successfully.',
+            'data' => $result,
+        ]);
+    }
+
+    public function export(Request $request, ProductHierarchyExportService $exporter)
+    {
+        $this->authorizeImport($request);
+
+        try {
+            $export = $exporter->export();
+        } catch (RuntimeException $exception) {
+            $status = in_array($exception->getCode(), [422], true) ? $exception->getCode() : 500;
+
+            return response()->json([
+                'success' => false,
+                'message' => $status === 500 ? 'The product hierarchy export could not be created.' : $exception->getMessage(),
+            ], $status);
+        }
+
+        return response($export['contents'], 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$export['filename'].'"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
         ]);
     }
 

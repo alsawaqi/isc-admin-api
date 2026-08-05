@@ -310,7 +310,8 @@ return new class extends Migration
             $required = [
                 'Token', 'User_Id', 'File_Name', 'File_Size', 'File_Sha256',
                 'Payload_Digest', 'Canonical_Payload', 'Summary', 'Status',
-                'Can_Commit', 'Expires_At', 'Committed_At', 'Result',
+                'Can_Commit', 'Expires_At', 'Committed_At', 'Rolled_Back_At',
+                'Rolled_Back_By', 'Result',
             ];
             $missing = array_values(array_filter(
                 $required,
@@ -337,12 +338,16 @@ return new class extends Migration
             $table->boolean('Can_Commit')->default(false);
             $table->dateTime('Expires_At');
             $table->dateTime('Committed_At')->nullable();
+            $table->dateTime('Rolled_Back_At')->nullable();
+            $table->unsignedBigInteger('Rolled_Back_By')->nullable();
             $table->longText('Result')->nullable();
             $table->timestamps();
             $table->index(['User_Id', 'Status'], 'idx_phi_job_user_status');
             $table->index('Expires_At', 'idx_phi_job_expiry');
             $table->foreign('User_Id', 'fk_phi_job_user')
                 ->references('id')->on('Secx_Admin_User_Master_T')->cascadeOnDelete();
+            $table->foreign('Rolled_Back_By', 'fk_phi_job_rollback_user')
+                ->references('id')->on('Secx_Admin_User_Master_T')->nullOnDelete();
         });
     }
 
