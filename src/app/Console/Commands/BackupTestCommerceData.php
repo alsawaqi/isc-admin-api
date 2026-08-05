@@ -44,18 +44,11 @@ final class BackupTestCommerceData extends Command
             return self::FAILURE;
         }
 
-        $compressed = "BACKUP DATABASE [isc] TO DISK = N'{$path}' WITH COPY_ONLY, INIT, COMPRESSION, CHECKSUM, STATS = 10";
-        $uncompressed = "BACKUP DATABASE [isc] TO DISK = N'{$path}' WITH COPY_ONLY, INIT, CHECKSUM, STATS = 10";
+        $backup = "BACKUP DATABASE [isc] TO DISK = N'{$path}' WITH COPY_ONLY, INIT, NO_COMPRESSION, CHECKSUM, STATS = 10";
         $verify = "RESTORE VERIFYONLY FROM DISK = N'{$path}' WITH CHECKSUM";
 
         try {
-            try {
-                $this->executeSql($compressed);
-            } catch (Throwable) {
-                $this->warn('Compressed backup was unavailable; retrying without compression.');
-                $this->executeSql($uncompressed);
-            }
-
+            $this->executeSql($backup);
             $this->executeSql($verify);
         } catch (Throwable $exception) {
             report($exception);
@@ -72,20 +65,42 @@ final class BackupTestCommerceData extends Command
     private function executeSql(string $sql): void
     {
         $statement = DB::connection()->getPdo()->prepare($sql);
-        if ($statement === false || ! $statement->execute()) {
-            throw new RuntimeException('SQL Server did not execute the backup verification statement.');
+        if ($statement === false) {
+            throw new RuntimeException('SQL Server did not prepare the backup verification statement.');
         }
 
-        do {
-            if ($statement->columnCount() > 0) {
-                while ($statement->fetch() !== false) {
-                    // Drain every result so PDO_SQLSRV surfaces late errors.
-                }
-            }
-        } while ($statement->nextRowset());
+        $failure = null;
 
-        if (! $statement->closeCursor()) {
-            throw new RuntimeException('SQL Server did not release the completed backup statement.');
+        try {
+            if (! $statement->execute()) {
+                throw new RuntimeException('SQL Server did not execute the backup verification statement.');
+            }
+
+            do {
+                if ($statement->columnCount() > 0) {
+                    while ($statement->fetch() !== false) {
+                        // Drain every result so PDO_SQLSRV surfaces late errors.
+                    }
+                }
+            } while ($statement->nextRowset());
+        } catch (Throwable $exception) {
+            $failure = $exception;
+        }
+
+        try {
+            if (! $statement->closeCursor()) {
+                throw new RuntimeException('SQL Server did not release the completed backup statement.');
+            }
+        } catch (Throwable $cleanupException) {
+            if ($failure === null) {
+                $failure = $cleanupException;
+            } else {
+                report($cleanupException);
+            }
+        }
+
+        if ($failure !== null) {
+            throw $failure;
         }
     }
 }
