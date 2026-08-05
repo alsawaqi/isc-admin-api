@@ -51,23 +51,29 @@ class ProductHierarchyExportService
     public function hierarchyRows(): array
     {
         $rows = [[
+            'No',
             'M-Id',
             'Main Group',
             'Product_Department_Code',
             'Sub Group',
             'Products_Sub_Department_Code',
-            'Sub Sub Category',
+            'Sub Sub Categories',
             'Product_Sub_Sub_Department_Code',
         ]];
+
+        $previousDepartmentId = null;
+        $previousSubDepartmentId = null;
 
         DB::table('Products_Departments_T as d')
             ->leftJoin('Products_Sub_Department_T as s', 's.Products_Departments_Id', '=', 'd.id')
             ->leftJoin('Products_Sub_Sub_Department_T as l', 'l.Product_Sub_Department_Id', '=', 's.id')
             ->select([
+                'd.id as department_id',
                 'd.Source_Main_Id as source_main_id',
                 'd.Source_Main_Sequence as source_main_sequence',
                 'd.Product_Department_Name as department_name',
                 'd.Product_Department_Code as department_code',
+                's.id as sub_department_id',
                 's.Sub_Department_Name as sub_department_name',
                 's.Products_Sub_Department_Code as sub_department_code',
                 'l.Product_Sub_Sub_Department_Name as sub_sub_department_name',
@@ -79,17 +85,17 @@ class ProductHierarchyExportService
             ->orderBy('s.Sub_Department_Name')
             ->orderByRaw('COALESCE(l.Source_Sub_Sub_Sequence, 2147483647)')
             ->orderBy('l.Product_Sub_Sub_Department_Name')
-            ->chunk(1000, function ($items) use (&$rows): void {
+            ->chunk(1000, function ($items) use (&$rows, &$previousDepartmentId, &$previousSubDepartmentId): void {
                 foreach ($items as $item) {
-                    $rows[] = [
-                        $this->sourceMainId($item->source_main_id, $item->source_main_sequence),
-                        (string) ($item->department_name ?? ''),
-                        (string) ($item->department_code ?? ''),
-                        (string) ($item->sub_department_name ?? ''),
-                        (string) ($item->sub_department_code ?? ''),
-                        (string) ($item->sub_sub_department_name ?? ''),
-                        (string) ($item->sub_sub_department_code ?? ''),
-                    ];
+                    $departmentId = (int) $item->department_id;
+                    $subDepartmentId = $item->sub_department_id === null ? null : (int) $item->sub_department_id;
+                    $showDepartment = $departmentId !== $previousDepartmentId;
+                    $showSubDepartment = $subDepartmentId !== null && ($showDepartment || $subDepartmentId !== $previousSubDepartmentId);
+
+                    $rows[] = $this->hierarchyRow($item, $showDepartment, $showSubDepartment);
+
+                    $previousDepartmentId = $departmentId;
+                    $previousSubDepartmentId = $subDepartmentId;
                 }
             });
 
@@ -105,7 +111,21 @@ class ProductHierarchyExportService
 
         $sequence = (int) $sequence;
 
-        return $sequence > 0 ? 'MAIN-'.str_pad((string) $sequence, 6, '0', STR_PAD_LEFT) : '';
+        return $sequence > 0 ? 'MAIN-'.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT) : '';
+    }
+
+    private function hierarchyRow(object $item, bool $showDepartment, bool $showSubDepartment): array
+    {
+        return [
+            $showDepartment ? (string) ($item->source_main_sequence ?? '') : '',
+            $showDepartment ? $this->sourceMainId($item->source_main_id, $item->source_main_sequence) : '',
+            $showDepartment ? (string) ($item->department_name ?? '') : '',
+            $showDepartment ? (string) ($item->department_code ?? '') : '',
+            $showSubDepartment ? (string) ($item->sub_department_name ?? '') : '',
+            $showSubDepartment ? (string) ($item->sub_department_code ?? '') : '',
+            (string) ($item->sub_sub_department_name ?? ''),
+            (string) ($item->sub_sub_department_code ?? ''),
+        ];
     }
 
     /** @param array<int, array<int, string>> $rows */
@@ -115,13 +135,14 @@ class ProductHierarchyExportService
             .'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
             .'<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
             .'<cols>'
-            .'<col min="1" max="1" width="18" customWidth="1"/>'
-            .'<col min="2" max="2" width="32" customWidth="1"/>'
-            .'<col min="3" max="3" width="38" customWidth="1"/>'
-            .'<col min="4" max="4" width="32" customWidth="1"/>'
-            .'<col min="5" max="5" width="46" customWidth="1"/>'
-            .'<col min="6" max="6" width="38" customWidth="1"/>'
-            .'<col min="7" max="7" width="60" customWidth="1"/>'
+            .'<col min="1" max="1" width="8" customWidth="1"/>'
+            .'<col min="2" max="2" width="16" customWidth="1"/>'
+            .'<col min="3" max="3" width="34" customWidth="1"/>'
+            .'<col min="4" max="4" width="38" customWidth="1"/>'
+            .'<col min="5" max="5" width="36" customWidth="1"/>'
+            .'<col min="6" max="6" width="46" customWidth="1"/>'
+            .'<col min="7" max="7" width="40" customWidth="1"/>'
+            .'<col min="8" max="8" width="60" customWidth="1"/>'
             .'</cols><sheetData>';
 
         foreach ($rows as $rowIndex => $row) {
@@ -135,7 +156,7 @@ class ProductHierarchyExportService
             $xml .= '</row>';
         }
 
-        return $xml.'</sheetData><autoFilter ref="A1:G'.max(1, count($rows)).'"/></worksheet>';
+        return $xml.'</sheetData><autoFilter ref="A1:H'.max(1, count($rows)).'"/></worksheet>';
     }
 
     private function columnName(int $index): string

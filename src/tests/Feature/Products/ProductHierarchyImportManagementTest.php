@@ -70,7 +70,17 @@ class ProductHierarchyImportManagementTest extends FeatureTestCase
     public function test_hierarchy_export_returns_excel_with_names_and_codes(): void
     {
         $user = $this->actingAsImportAdmin();
-        [$department] = $this->createHierarchy($user);
+        [$department, $subDepartment] = $this->createHierarchy($user);
+        ProductSubSubDepartment::create([
+            'Product_Sub_Department_Id' => $subDepartment->id,
+            'Product_Sub_Sub_Department_Code' => $subDepartment->Products_Sub_Department_Code.'_SUBSUB_000002',
+            'Source_Sub_Sub_Sequence' => 2,
+            'Product_Sub_Sub_Department_Name' => 'Second Export Leaf '.uniqid(),
+            'Product_Sub_Sub_Department_Name_Ar' => null,
+            'Slug' => 'second-export-leaf-'.strtolower(str_replace('.', '', uniqid('', true))),
+            'Created_Date' => now(),
+            'Created_By' => $user->id,
+        ]);
 
         $response = $this->get('/api/product-hierarchy-import/export');
 
@@ -91,8 +101,12 @@ class ProductHierarchyImportManagementTest extends FeatureTestCase
         @unlink($path);
 
         $this->assertIsString($sheet);
+        $this->assertStringContainsString('<t>No</t>', $sheet);
+        $this->assertStringContainsString('<t>Sub Sub Categories</t>', $sheet);
         $this->assertStringContainsString($department->Product_Department_Name, $sheet);
         $this->assertStringContainsString($department->Product_Department_Code, $sheet);
+        $this->assertSame(1, substr_count($sheet, $department->Product_Department_Name));
+        $this->assertSame(1, substr_count($sheet, $subDepartment->Sub_Department_Name));
     }
 
     private function actingAsImportAdmin(): User

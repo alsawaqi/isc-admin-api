@@ -107,41 +107,58 @@ final class ProductHierarchyXlsxParserTest extends TestCase
         $result = $this->parse([
             1 => MinimalXlsxFactory::hierarchyHeader(),
             2 => ['C2' => 'MAIN-0001', 'D2' => ' Pneumatics ', 'F2' => 'Air   Compressors', 'G2' => 'Piston Air Compressors'],
-            3 => ['C3' => 'MAIN-0001', 'D3' => 'Pneumatics', 'G3' => 'Screw Air Compressors'],
-            4 => ['C4' => 'MAIN-0001', 'D4' => 'Pneumatics'],
-            5 => ['C5' => 'MAIN-0001', 'D5' => 'Pneumatics', 'G5' => 'Portable Air Compressors'],
+            3 => ['G3' => 'Screw Air Compressors'],
+            4 => [],
+            5 => ['F5' => 'Pneumatic Hoses & Tubing', 'G5' => 'Nylon Tubing'],
         ]);
 
-        $this->assertSame(4, $result['rows_read']);
+        $this->assertSame(3, $result['rows_read']);
         $this->assertSame(1, $result['separator_rows']);
         $this->assertSame(3, $result['valid_paths']);
         $this->assertSame(1, $result['departments']);
-        $this->assertSame(1, $result['sub_departments']);
+        $this->assertSame(2, $result['sub_departments']);
         $this->assertSame([], $result['issues']);
 
         $department = array_values($result['hierarchy'])[0];
-        $subDepartment = array_values($department['sub_departments'])[0];
+        $subDepartments = array_values($department['sub_departments']);
         $this->assertSame(1, $department['main_sequence']);
         $this->assertSame('Pneumatics', $department['name']);
-        $this->assertSame('Air Compressors', $subDepartment['name']);
+        $this->assertSame('Air Compressors', $subDepartments[0]['name']);
+        $this->assertSame('Pneumatic Hoses & Tubing', $subDepartments[1]['name']);
         $this->assertSame(
-            ['Piston Air Compressors', 'Screw Air Compressors', 'Portable Air Compressors'],
-            array_column(array_values($subDepartment['sub_sub_departments']), 'name'),
+            ['Piston Air Compressors', 'Screw Air Compressors'],
+            array_column(array_values($subDepartments[0]['sub_sub_departments']), 'name'),
         );
     }
 
-    public function test_a_fully_blank_row_resets_subgroup_inheritance(): void
+    public function test_a_fully_blank_row_preserves_subgroup_inheritance(): void
     {
         $result = $this->parse([
             1 => MinimalXlsxFactory::hierarchyHeader(),
             2 => ['C2' => 'MAIN-0001', 'D2' => 'Pneumatics', 'F2' => 'Air Compressors', 'G2' => 'Screw Air Compressors'],
             3 => [],
-            4 => ['C4' => 'MAIN-0001', 'D4' => 'Pneumatics', 'G4' => 'Must Not Inherit'],
+            4 => ['G4' => 'Still Inherits'],
         ]);
 
         $this->assertSame(1, $result['separator_rows']);
-        $this->assertSame(1, $result['valid_paths']);
-        $this->assertIssue($result, 'missing_sub_group', 4, 'error');
+        $this->assertSame(2, $result['valid_paths']);
+        $this->assertSame([], $result['issues']);
+    }
+
+    public function test_blank_main_id_with_main_group_can_be_inferred_from_no_column(): void
+    {
+        $result = $this->parse([
+            1 => ['B1' => 'No', 'C1' => 'M-Id', 'D1' => 'Main Group', 'F1' => 'Sub Group', 'G1' => 'Sub Sub Categories'],
+            2 => ['B2' => '1', 'C2' => 'MAIN-0001', 'D2' => 'Pneumatics', 'F2' => 'Air Compressors', 'G2' => 'Piston Air Compressors'],
+            3 => ['B3' => '20', 'D3' => 'Adhesives, Sealant and Tapes'],
+        ]);
+
+        $departments = array_values($result['hierarchy']);
+
+        $this->assertSame(2, $result['departments']);
+        $this->assertSame('MAIN-0020', $departments[1]['main_id']);
+        $this->assertSame(20, $departments[1]['main_sequence']);
+        $this->assertIssue($result, 'missing_main_id_inferred', 3, 'warning');
     }
 
     public function test_subgroup_inheritance_resets_when_the_main_id_changes(): void

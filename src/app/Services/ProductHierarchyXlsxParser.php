@@ -38,6 +38,8 @@ class ProductHierarchyXlsxParser
 
     private const MAX_DOM_TAG_MARKERS = 20_000;
 
+    private const REQUIRED_HEADERS = ['main_id', 'main_group', 'sub_group', 'sub_sub_category'];
+
     /**
      * Parse and normalize an XLSX product hierarchy without evaluating formulas.
      *
@@ -467,8 +469,6 @@ class ProductHierarchyXlsxParser
 
             if (implode('', $values) === '') {
                 $separatorRows++;
-                $activeMainId = null;
-                $activeSubGroup = null;
 
                 continue;
             }
@@ -478,97 +478,115 @@ class ProductHierarchyXlsxParser
             $mainGroup = $values['main_group'];
             $subGroup = $values['sub_group'];
             $leaf = $values['sub_sub_category'];
+            $mainIsInherited = false;
 
             if ($mainId === '') {
-                $this->issue($issues, 'error', $row['row'], 'missing_main_id', 'M-Id is required on every hierarchy row.');
-                $activeMainId = null;
-                $activeSubGroup = null;
-
-                continue;
-            }
-
-            try {
-                $mainIdentity = ProductHierarchyCode::parseMainId($mainId);
-            } catch (InvalidArgumentException $exception) {
-                $this->issue($issues, 'error', $row['row'], 'invalid_main_id', $exception->getMessage());
-                $activeMainId = null;
-                $activeSubGroup = null;
-
-                continue;
-            }
-
-            $mainId = $mainIdentity['source_id'];
-            $mainSequence = $mainIdentity['sequence'];
-            $mainIdKey = (string) $mainSequence;
-
-            if ($mainGroup === '') {
-                $this->issue($issues, 'error', $row['row'], 'missing_main_group', 'Main Group is required when M-Id is present.');
-                $activeMainId = null;
-                $activeSubGroup = null;
-
-                continue;
-            }
-
-            if ($this->hasOverlongName($mainGroup, $subGroup, $leaf)) {
-                $this->issue($issues, 'error', $row['row'], 'name_too_long', 'Department names must be 255 characters or fewer.');
-
-                continue;
-            }
-
-            $mainNameKey = $this->key($mainGroup);
-
-            if (
-                isset($mainSequenceToIdentity[$mainIdKey])
-                && $mainSequenceToIdentity[$mainIdKey]['main_id'] !== $mainId
-            ) {
-                $first = $mainSequenceToIdentity[$mainIdKey];
-                $this->issue(
+                [$mainId, $mainIdKey, $mainIsInherited] = $this->resolveBlankMainId(
+                    $mainGroup,
+                    (string) ($values['main_number'] ?? ''),
+                    $activeMainId,
+                    $hierarchy,
                     $issues,
-                    'error',
                     $row['row'],
-                    'main_id_alias_conflict',
-                    "M-Id {$mainId} is a numeric alias of {$first['main_id']} from row {$first['row']}; use one spelling consistently."
                 );
-                $activeMainId = null;
-                $activeSubGroup = null;
+                if ($mainId === null) {
+                    $activeMainId = null;
+                    $activeSubGroup = null;
 
-                continue;
+                    continue;
+                }
+
+                if ($mainIsInherited && $this->hasOverlongName($subGroup, $leaf)) {
+                    $this->issue($issues, 'error', $row['row'], 'name_too_long', 'Department names must be 255 characters or fewer.');
+
+                    continue;
+                }
             }
 
-            if (! isset($mainSequenceToIdentity[$mainIdKey])) {
-                $mainSequenceToIdentity[$mainIdKey] = [
-                    'main_id' => $mainId,
-                    'name' => $mainGroup,
-                    'row' => $row['row'],
-                ];
-            }
+            if (! $mainIsInherited) {
+                try {
+                    $mainIdentity = ProductHierarchyCode::parseMainId($mainId);
+                } catch (InvalidArgumentException $exception) {
+                    $this->issue($issues, 'error', $row['row'], 'invalid_main_id', $exception->getMessage());
+                    $activeMainId = null;
+                    $activeSubGroup = null;
 
-            if ($activeMainId !== $mainIdKey) {
-                $activeMainId = $mainIdKey;
-                $activeSubGroup = null;
-            }
+                    continue;
+                }
 
-            if (isset($hierarchy[$mainIdKey]) && $this->key($hierarchy[$mainIdKey]['name']) !== $mainNameKey) {
-                $this->issue($issues, 'error', $row['row'], 'main_id_name_conflict', "M-Id {$mainId} is assigned to more than one Main Group name.");
+                $mainId = $mainIdentity['source_id'];
+                $mainSequence = $mainIdentity['sequence'];
+                $mainIdKey = (string) $mainSequence;
 
-                continue;
-            }
+                if ($mainGroup === '') {
+                    $this->issue($issues, 'error', $row['row'], 'missing_main_group', 'Main Group is required when M-Id is present.');
+                    $activeMainId = null;
+                    $activeSubGroup = null;
 
-            if (isset($mainNameToSequence[$mainNameKey]) && $mainNameToSequence[$mainNameKey] !== $mainIdKey) {
-                $this->issue($issues, 'error', $row['row'], 'main_name_id_conflict', "Main Group {$mainGroup} is assigned to more than one M-Id.");
+                    continue;
+                }
 
-                continue;
-            }
+                if ($this->hasOverlongName($mainGroup, $subGroup, $leaf)) {
+                    $this->issue($issues, 'error', $row['row'], 'name_too_long', 'Department names must be 255 characters or fewer.');
 
-            $mainNameToSequence[$mainNameKey] = $mainIdKey;
-            if (! isset($hierarchy[$mainIdKey])) {
-                $hierarchy[$mainIdKey] = [
-                    'main_id' => $mainId,
-                    'main_sequence' => $mainSequence,
-                    'name' => $mainGroup,
-                    'first_row' => $row['row'],
-                    'sub_departments' => [],
-                ];
+                    continue;
+                }
+
+                $mainNameKey = $this->key($mainGroup);
+
+                if (
+                    isset($mainSequenceToIdentity[$mainIdKey])
+                    && $mainSequenceToIdentity[$mainIdKey]['main_id'] !== $mainId
+                ) {
+                    $first = $mainSequenceToIdentity[$mainIdKey];
+                    $this->issue(
+                        $issues,
+                        'error',
+                        $row['row'],
+                        'main_id_alias_conflict',
+                        "M-Id {$mainId} is a numeric alias of {$first['main_id']} from row {$first['row']}; use one spelling consistently."
+                    );
+                    $activeMainId = null;
+                    $activeSubGroup = null;
+
+                    continue;
+                }
+
+                if (! isset($mainSequenceToIdentity[$mainIdKey])) {
+                    $mainSequenceToIdentity[$mainIdKey] = [
+                        'main_id' => $mainId,
+                        'name' => $mainGroup,
+                        'row' => $row['row'],
+                    ];
+                }
+
+                if ($activeMainId !== $mainIdKey) {
+                    $activeMainId = $mainIdKey;
+                    $activeSubGroup = null;
+                }
+
+                if (isset($hierarchy[$mainIdKey]) && $this->key($hierarchy[$mainIdKey]['name']) !== $mainNameKey) {
+                    $this->issue($issues, 'error', $row['row'], 'main_id_name_conflict', "M-Id {$mainId} is assigned to more than one Main Group name.");
+
+                    continue;
+                }
+
+                if (isset($mainNameToSequence[$mainNameKey]) && $mainNameToSequence[$mainNameKey] !== $mainIdKey) {
+                    $this->issue($issues, 'error', $row['row'], 'main_name_id_conflict', "Main Group {$mainGroup} is assigned to more than one M-Id.");
+
+                    continue;
+                }
+
+                $mainNameToSequence[$mainNameKey] = $mainIdKey;
+                if (! isset($hierarchy[$mainIdKey])) {
+                    $hierarchy[$mainIdKey] = [
+                        'main_id' => $mainId,
+                        'main_sequence' => $mainSequence,
+                        'name' => $mainGroup,
+                        'first_row' => $row['row'],
+                        'sub_departments' => [],
+                    ];
+                }
             }
 
             if ($subGroup === '' && $leaf === '') {
@@ -580,7 +598,7 @@ class ProductHierarchyXlsxParser
             if ($subGroup !== '') {
                 $activeSubGroup = $subGroup;
             } elseif ($leaf !== '' && $activeSubGroup === null) {
-                $this->issue($issues, 'error', $row['row'], 'missing_sub_group', 'Sub Group is blank and cannot be inherited after the M-Id changed.');
+                $this->issue($issues, 'error', $row['row'], 'missing_sub_group', 'Sub Group is blank and cannot be inherited before a valid Sub Group.');
 
                 continue;
             }
@@ -665,7 +683,7 @@ class ProductHierarchyXlsxParser
                 }
             }
 
-            if (count($columns) === 4) {
+            if (array_diff(self::REQUIRED_HEADERS, array_keys($columns)) === []) {
                 return ['row' => $row['row'], 'columns' => $columns];
             }
         }
@@ -678,12 +696,56 @@ class ProductHierarchyXlsxParser
         $header = preg_replace('/[^a-z0-9]+/', '', mb_strtolower($this->display($value))) ?? '';
 
         return match ($header) {
+            'no', 'srno', 'serialno', 'serialnumber' => 'main_number',
             'mid', 'mainid' => 'main_id',
             'maingroup' => 'main_group',
             'subgroup' => 'sub_group',
             'subsubcategories', 'subsubcategory', 'subsubgroup' => 'sub_sub_category',
             default => null,
         };
+    }
+
+    private function mainIdFromNumber(string $value): ?string
+    {
+        $number = $this->display($value);
+        if (! preg_match('/^\d+(?:\.0+)?$/D', $number)) {
+            return null;
+        }
+
+        $sequence = (int) $number;
+        if ($sequence < 1 || $sequence > 999999) {
+            return null;
+        }
+
+        return 'MAIN-'.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function resolveBlankMainId(string $mainGroup, string $mainNumber, ?string $activeMainId, array $hierarchy, array &$issues, int $row): array
+    {
+        if ($mainGroup === '') {
+            if ($activeMainId !== null && isset($hierarchy[$activeMainId])) {
+                return ['', $activeMainId, true];
+            }
+            $this->issue($issues, 'error', $row, 'missing_main_id', 'M-Id and Main Group are blank and cannot be inherited before a valid main group.');
+
+            return [null, null, false];
+        }
+
+        return $this->inferMissingMainId($mainGroup, $mainNumber, $issues, $row);
+    }
+
+    private function inferMissingMainId(string $mainGroup, string $mainNumber, array &$issues, int $row): array
+    {
+        $mainId = $this->mainIdFromNumber($mainNumber);
+        if ($mainId === null) {
+            $this->issue($issues, 'error', $row, 'missing_main_id', 'M-Id is required when Main Group is present.');
+
+            return [null, null, false];
+        }
+
+        $this->issue($issues, 'warning', $row, 'missing_main_id_inferred', 'M-Id inferred from the No column.');
+
+        return [$mainId, null, false];
     }
 
     private function columnNumber(string $letters): int
