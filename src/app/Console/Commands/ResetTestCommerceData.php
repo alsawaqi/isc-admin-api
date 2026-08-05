@@ -6,6 +6,7 @@ use App\Support\CommerceTestDataResetPlan;
 use App\Support\CommerceTestDataResetSafetyPolicy;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use PDO;
 use RuntimeException;
 use Throwable;
 
@@ -355,7 +356,24 @@ final class ResetTestCommerceData extends Command
     /** @return list<object> */
     private function constraintViolations(): array
     {
-        return DB::select('DBCC CHECKCONSTRAINTS WITH ALL_CONSTRAINTS, NO_INFOMSGS');
+        $statement = DB::connection()->getPdo()->prepare(
+            'DBCC CHECKCONSTRAINTS WITH ALL_CONSTRAINTS, NO_INFOMSGS',
+        );
+
+        if ($statement === false || ! $statement->execute()) {
+            throw new RuntimeException('DBCC CHECKCONSTRAINTS could not be executed.');
+        }
+
+        // PDO_SQLSRV exposes a successful DBCC with no violations as a
+        // statement with zero columns; Laravel's DB::select() cannot fetch it.
+        if ($statement->columnCount() === 0) {
+            return [];
+        }
+
+        /** @var list<object> $violations */
+        $violations = $statement->fetchAll(PDO::FETCH_OBJ);
+
+        return $violations;
     }
 
     private function dbccValue(object $row, string ...$columns): string
