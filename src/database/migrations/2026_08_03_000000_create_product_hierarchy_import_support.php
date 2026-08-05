@@ -347,7 +347,7 @@ return new class extends Migration
             $table->foreign('User_Id', 'fk_phi_job_user')
                 ->references('id')->on('Secx_Admin_User_Master_T')->cascadeOnDelete();
             $table->foreign('Rolled_Back_By', 'fk_phi_job_rollback_user')
-                ->references('id')->on('Secx_Admin_User_Master_T')->nullOnDelete();
+                ->references('id')->on('Secx_Admin_User_Master_T');
         });
     }
 

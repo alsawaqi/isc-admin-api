@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -18,10 +19,15 @@ return new class extends Migration
             }
             if (! Schema::hasColumn('Product_Hierarchy_Import_Jobs_T', 'Rolled_Back_By')) {
                 $table->unsignedBigInteger('Rolled_Back_By')->nullable();
-                $table->foreign('Rolled_Back_By', 'fk_phi_job_rollback_user')
-                    ->references('id')->on('Secx_Admin_User_Master_T')->nullOnDelete();
             }
         });
+
+        if (! $this->foreignKeyExists('fk_phi_job_rollback_user')) {
+            Schema::table('Product_Hierarchy_Import_Jobs_T', function (Blueprint $table) {
+                $table->foreign('Rolled_Back_By', 'fk_phi_job_rollback_user')
+                    ->references('id')->on('Secx_Admin_User_Master_T');
+            });
+        }
     }
 
     public function down(): void
@@ -32,12 +38,26 @@ return new class extends Migration
 
         Schema::table('Product_Hierarchy_Import_Jobs_T', function (Blueprint $table) {
             if (Schema::hasColumn('Product_Hierarchy_Import_Jobs_T', 'Rolled_Back_By')) {
-                $table->dropForeign('fk_phi_job_rollback_user');
+                if ($this->foreignKeyExists('fk_phi_job_rollback_user')) {
+                    $table->dropForeign('fk_phi_job_rollback_user');
+                }
                 $table->dropColumn('Rolled_Back_By');
             }
             if (Schema::hasColumn('Product_Hierarchy_Import_Jobs_T', 'Rolled_Back_At')) {
                 $table->dropColumn('Rolled_Back_At');
             }
         });
+    }
+
+    private function foreignKeyExists(string $name): bool
+    {
+        if (DB::connection()->getDriverName() === 'sqlsrv') {
+            return (bool) DB::selectOne(
+                'select 1 as [exists] from sys.foreign_keys where [name] = ?',
+                [$name],
+            );
+        }
+
+        return false;
     }
 };
