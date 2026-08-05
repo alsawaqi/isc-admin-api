@@ -74,7 +74,7 @@ final class ResetTestCommerceData extends Command
             $constraintViolations = $this->constraintViolations();
         } catch (Throwable $exception) {
             report($exception);
-            $this->error('Unable to complete DBCC CHECKCONSTRAINTS preflight. No data was changed.');
+            $this->error('Unable to complete DBCC CHECKCONSTRAINTS preflight. No data was changed: '.$exception->getMessage());
 
             return self::FAILURE;
         }
