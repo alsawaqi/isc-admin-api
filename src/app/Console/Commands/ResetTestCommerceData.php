@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Support\CommerceTestDataResetPlan;
+use App\Support\CommerceTestDataResetSafetyPolicy;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -47,6 +48,11 @@ final class ResetTestCommerceData extends Command
 
         $plannedTables = CommerceTestDataResetPlan::deletionTables();
         $existingTables = $this->existingTables($plannedTables);
+        $constraintHealthTables = $this->existingTables(array_values(array_unique([
+            ...$plannedTables,
+            'Customers_Loyalty_T',
+            'Credit_Customers_T',
+        ])));
         $missingTables = array_values(array_diff($plannedTables, $existingTables));
         $requiredTables = ['Products_Master_T', 'Products_Departments_T', 'Orders_Placed_T'];
 
@@ -58,7 +64,20 @@ final class ResetTestCommerceData extends Command
 
         $counts = $this->tableCounts($existingTables);
         $unexpectedForeignKeys = $this->unexpectedForeignKeys($existingTables);
-        $unsafeConstraints = $this->disabledOrUntrustedConstraints($existingTables);
+        $constraintHealth = CommerceTestDataResetSafetyPolicy::classifyConstraintHealth(
+            $this->constraintHealthFindings($constraintHealthTables),
+        );
+
+        try {
+            // Read-only integrity verification must pass before an operator may
+            // proceed to the backup/delete execution phase.
+            $constraintViolations = $this->constraintViolations();
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->error('Unable to complete DBCC CHECKCONSTRAINTS preflight. No data was changed.');
+
+            return self::FAILURE;
+        }
         $preservedTables = $this->existingTables(CommerceTestDataResetPlan::preservedTables());
         $preservedCounts = $this->tableCounts($preservedTables);
         $orderLinkedTickets = $this->orderLinkedSupportTicketCount();
@@ -84,30 +103,60 @@ final class ResetTestCommerceData extends Command
         if ($unexpectedForeignKeys !== []) {
             $this->error('Unexpected foreign-key children exist outside the reset plan:');
             $this->table(
-                ['Child table', 'Constraint', 'Referenced table', 'Delete action'],
+                ['Child object', 'Constraint', 'Referenced object', 'Delete action'],
                 array_map(static fn (object $row): array => [
-                    $row->ChildTable,
+                    $row->ChildSchema.'.'.$row->ChildTable,
                     $row->ConstraintName,
-                    $row->ReferencedTable,
+                    $row->ReferencedSchema.'.'.$row->ReferencedTable,
                     $row->DeleteAction,
                 ], $unexpectedForeignKeys),
             );
         }
 
-        if ($unsafeConstraints !== []) {
-            $this->error('Disabled or untrusted constraints involve reset tables:');
+        if ($constraintHealth['disabled'] !== []) {
+            $this->error('Disabled FK or CHECK constraints involve reset or mutated tables and must be enabled before reset:');
             $this->table(
-                ['Table', 'Constraint', 'Disabled', 'Untrusted'],
+                ['Type', 'Object', 'Constraint', 'Disabled', 'Untrusted'],
                 array_map(static fn (object $row): array => [
-                    $row->TableName,
+                    $row->ConstraintType,
+                    $row->SchemaName.'.'.$row->TableName,
                     $row->ConstraintName,
                     (string) $row->IsDisabled,
                     (string) $row->IsNotTrusted,
-                ], $unsafeConstraints),
+                ], $constraintHealth['disabled']),
             );
         }
 
-        if ($unexpectedForeignKeys !== [] || $unsafeConstraints !== []) {
+        if ($constraintHealth['untrusted'] !== [] && $constraintViolations === []) {
+            $this->warn('Enabled but untrusted FK or CHECK constraints involve reset or mutated tables. DBCC found no data violations, so this is a warning rather than a blocker:');
+            $this->table(
+                ['Type', 'Object', 'Constraint', 'Untrusted'],
+                array_map(static fn (object $row): array => [
+                    $row->ConstraintType,
+                    $row->SchemaName.'.'.$row->TableName,
+                    $row->ConstraintName,
+                    (string) $row->IsNotTrusted,
+                ], $constraintHealth['untrusted']),
+            );
+        }
+
+        if ($constraintViolations !== []) {
+            $this->error('DBCC CHECKCONSTRAINTS found existing integrity violations:');
+            $this->table(
+                ['Table', 'Constraint', 'Where'],
+                array_map(fn (object $row): array => [
+                    $this->dbccValue($row, 'Table Name', 'Table'),
+                    $this->dbccValue($row, 'Constraint Name', 'Constraint'),
+                    $this->dbccValue($row, 'Where'),
+                ], $constraintViolations),
+            );
+        }
+
+        if (CommerceTestDataResetSafetyPolicy::blocksReset(
+            $unexpectedForeignKeys,
+            $constraintHealth['disabled'],
+            $constraintViolations,
+        )) {
             $this->error('Preflight failed. No data was changed.');
 
             return self::FAILURE;
@@ -129,7 +178,16 @@ final class ResetTestCommerceData extends Command
             if ($this->unexpectedForeignKeys($existingTables) !== []) {
                 throw new RuntimeException('Foreign-key topology changed after preflight.');
             }
+            $lockedConstraintHealth = CommerceTestDataResetSafetyPolicy::classifyConstraintHealth(
+                $this->constraintHealthFindings($constraintHealthTables),
+            );
+            if ($lockedConstraintHealth['disabled'] !== []) {
+                throw new RuntimeException('An FK or CHECK constraint involving reset or mutated tables became disabled after preflight.');
+            }
 
+            if ($this->constraintViolations() !== []) {
+                throw new RuntimeException('DBCC CHECKCONSTRAINTS found integrity violations after the reset lock was acquired.');
+            }
             $preservedCounts = $this->tableCounts($preservedTables);
             $deleted = [];
             $deleted['Support_Ticket_Messages_T'] = $this->deleteOrderLinkedSupportTicketMessages();
@@ -162,7 +220,7 @@ final class ResetTestCommerceData extends Command
                 throw new RuntimeException('Order-linked support tickets remain after reset.');
             }
 
-            $constraintErrors = DB::select('DBCC CHECKCONSTRAINTS WITH ALL_CONSTRAINTS');
+            $constraintErrors = $this->constraintViolations();
             if ($constraintErrors !== []) {
                 throw new RuntimeException('DBCC CHECKCONSTRAINTS reported integrity violations.');
             }
@@ -222,23 +280,31 @@ final class ResetTestCommerceData extends Command
         $placeholders = implode(', ', array_fill(0, count($tables), '?'));
         $sql = <<<SQL
             SELECT
+                parent_schema.name AS ChildSchema,
                 parent_table.name AS ChildTable,
                 foreign_key.name AS ConstraintName,
+                referenced_schema.name AS ReferencedSchema,
                 referenced_table.name AS ReferencedTable,
                 foreign_key.delete_referential_action_desc AS DeleteAction
             FROM sys.foreign_keys AS foreign_key
             INNER JOIN sys.tables AS parent_table ON parent_table.object_id = foreign_key.parent_object_id
+            INNER JOIN sys.schemas AS parent_schema ON parent_schema.schema_id = parent_table.schema_id
             INNER JOIN sys.tables AS referenced_table ON referenced_table.object_id = foreign_key.referenced_object_id
-            WHERE referenced_table.name IN ({$placeholders})
-              AND parent_table.name NOT IN ({$placeholders})
-            ORDER BY parent_table.name, foreign_key.name
+            INNER JOIN sys.schemas AS referenced_schema ON referenced_schema.schema_id = referenced_table.schema_id
+            WHERE referenced_schema.name = N'dbo'
+              AND referenced_table.name IN ({$placeholders})
+              AND NOT (
+                  parent_schema.name = N'dbo'
+                  AND parent_table.name IN ({$placeholders})
+              )
+            ORDER BY parent_schema.name, parent_table.name, foreign_key.name
             SQL;
 
         return DB::select($sql, [...$tables, ...$tables]);
     }
 
     /** @param list<string> $tables @return list<object> */
-    private function disabledOrUntrustedConstraints(array $tables): array
+    private function constraintHealthFindings(array $tables): array
     {
         if ($tables === []) {
             return [];
@@ -247,19 +313,62 @@ final class ResetTestCommerceData extends Command
         $placeholders = implode(', ', array_fill(0, count($tables), '?'));
         $sql = <<<SQL
             SELECT
+                N'FOREIGN KEY' AS ConstraintType,
+                parent_schema.name AS SchemaName,
                 parent_table.name AS TableName,
                 foreign_key.name AS ConstraintName,
                 foreign_key.is_disabled AS IsDisabled,
                 foreign_key.is_not_trusted AS IsNotTrusted
             FROM sys.foreign_keys AS foreign_key
             INNER JOIN sys.tables AS parent_table ON parent_table.object_id = foreign_key.parent_object_id
+            INNER JOIN sys.schemas AS parent_schema ON parent_schema.schema_id = parent_table.schema_id
             INNER JOIN sys.tables AS referenced_table ON referenced_table.object_id = foreign_key.referenced_object_id
+            INNER JOIN sys.schemas AS referenced_schema ON referenced_schema.schema_id = referenced_table.schema_id
             WHERE (foreign_key.is_disabled = 1 OR foreign_key.is_not_trusted = 1)
-              AND (parent_table.name IN ({$placeholders}) OR referenced_table.name IN ({$placeholders}))
-            ORDER BY parent_table.name, foreign_key.name
+              AND (
+                  (parent_schema.name = N'dbo' AND parent_table.name IN ({$placeholders}))
+                  OR (referenced_schema.name = N'dbo' AND referenced_table.name IN ({$placeholders}))
+              )
+
+            UNION ALL
+
+            SELECT
+                N'CHECK' AS ConstraintType,
+                table_schema.name AS SchemaName,
+                constrained_table.name AS TableName,
+                check_constraint.name AS ConstraintName,
+                check_constraint.is_disabled AS IsDisabled,
+                check_constraint.is_not_trusted AS IsNotTrusted
+            FROM sys.check_constraints AS check_constraint
+            INNER JOIN sys.tables AS constrained_table ON constrained_table.object_id = check_constraint.parent_object_id
+            INNER JOIN sys.schemas AS table_schema ON table_schema.schema_id = constrained_table.schema_id
+            WHERE (check_constraint.is_disabled = 1 OR check_constraint.is_not_trusted = 1)
+              AND table_schema.name = N'dbo'
+              AND constrained_table.name IN ({$placeholders})
+
+            ORDER BY SchemaName, TableName, ConstraintName
             SQL;
 
-        return DB::select($sql, [...$tables, ...$tables]);
+        return DB::select($sql, [...$tables, ...$tables, ...$tables]);
+    }
+
+    /** @return list<object> */
+    private function constraintViolations(): array
+    {
+        return DB::select('DBCC CHECKCONSTRAINTS WITH ALL_CONSTRAINTS, NO_INFOMSGS');
+    }
+
+    private function dbccValue(object $row, string ...$columns): string
+    {
+        foreach ((array) $row as $key => $value) {
+            foreach ($columns as $column) {
+                if (strcasecmp((string) $key, $column) === 0) {
+                    return (string) $value;
+                }
+            }
+        }
+
+        return '';
     }
 
     private function acquireTransactionLock(): void
