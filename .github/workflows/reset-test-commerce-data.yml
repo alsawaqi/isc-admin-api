@@ -82,7 +82,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)"
 
           docker compose -f docker-compose.prod.yml exec -T laravel-app \
-            php artisan list --raw | grep -Eq '^commerce:reset-test-data[[:space:]]'
+            php artisan list --raw | grep -E '^commerce:reset-test-data[[:space:]]'
 
           if test "$mode" = dry-run; then
             test "$confirm" = INSPECT-TEST-COMMERCE-DATA
