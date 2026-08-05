@@ -165,13 +165,22 @@ jobs:
           compressed_backup_query="BACKUP DATABASE [isc] TO DISK = N'${backup_container_path}' WITH COPY_ONLY, INIT, COMPRESSION, CHECKSUM, STATS = 10"
           uncompressed_backup_query="BACKUP DATABASE [isc] TO DISK = N'${backup_container_path}' WITH COPY_ONLY, INIT, CHECKSUM, STATS = 10"
           verify_backup_query="RESTORE VERIFYONLY FROM DISK = N'${backup_container_path}' WITH CHECKSUM"
+          db_username="$(docker compose -f "$admin_dir/docker-compose.prod.yml" exec -T laravel-app printenv DB_USERNAME)"
+          db_password="$(docker compose -f "$admin_dir/docker-compose.prod.yml" exec -T laravel-app printenv DB_PASSWORD)"
+          test -n "$db_username"
+          test -n "$db_password"
 
-          docker exec \
+          printf '%s\n%s\n' "$db_username" "$db_password" |
+            docker exec -i \
             -e COMPRESSED_BACKUP_QUERY="$compressed_backup_query" \
             -e UNCOMPRESSED_BACKUP_QUERY="$uncompressed_backup_query" \
             -e VERIFY_BACKUP_QUERY="$verify_backup_query" \
             mssql-server bash -lc '
             set -Eeuo pipefail
+            IFS= read -r DB_USERNAME
+            IFS= read -r DB_PASSWORD
+            test -n "$DB_USERNAME"
+            test -n "$DB_PASSWORD"
             if test -x /opt/mssql-tools18/bin/sqlcmd; then
               sqlcmd=/opt/mssql-tools18/bin/sqlcmd
             elif test -x /opt/mssql-tools/bin/sqlcmd; then
@@ -180,14 +189,15 @@ jobs:
               echo "sqlcmd is not installed in the SQL Server container" >&2
               exit 3
             fi
-            export SQLCMDPASSWORD="$MSSQL_SA_PASSWORD"
-            if ! "$sqlcmd" -C -b -S localhost -U sa -Q "$COMPRESSED_BACKUP_QUERY"; then
+            export SQLCMDPASSWORD="$DB_PASSWORD"
+            if ! "$sqlcmd" -C -b -S localhost -U "$DB_USERNAME" -Q "$COMPRESSED_BACKUP_QUERY"; then
               echo "Compressed backup was unavailable; retrying without compression." >&2
-              "$sqlcmd" -C -b -S localhost -U sa -Q "$UNCOMPRESSED_BACKUP_QUERY"
+              "$sqlcmd" -C -b -S localhost -U "$DB_USERNAME" -Q "$UNCOMPRESSED_BACKUP_QUERY"
             fi
-            "$sqlcmd" -C -b -S localhost -U sa -Q "$VERIFY_BACKUP_QUERY"
-            unset SQLCMDPASSWORD
+            "$sqlcmd" -C -b -S localhost -U "$DB_USERNAME" -Q "$VERIFY_BACKUP_QUERY"
+            unset SQLCMDPASSWORD DB_PASSWORD DB_USERNAME
           '
+          unset db_password db_username
 
           docker cp "mssql-server:${backup_container_path}" "$backup_host_path"
           chmod 600 "$backup_host_path"
