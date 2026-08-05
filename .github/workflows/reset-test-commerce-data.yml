@@ -169,12 +169,28 @@ jobs:
               --database=isc \
               --path="$backup_container_path"
 
-          docker cp "mssql-server:${backup_container_path}" "$backup_host_path"
-          chmod 600 "$backup_host_path"
+          source_backup_bytes="$(docker exec mssql-server stat -c %s -- "$backup_container_path")"
+          source_backup_sha256="$(docker exec mssql-server sha256sum -- "$backup_container_path" | awk '{print $1}')"
+          test "$source_backup_bytes" -gt 0
+          test "${#source_backup_sha256}" -eq 64
+          case "$source_backup_sha256" in
+            *[!0-9a-f]*) exit 4 ;;
+          esac
+
+          backup_host_tmp="${backup_host_path}.partial"
+          test ! -e "$backup_host_tmp"
+          test ! -e "$backup_host_path"
+          docker cp "mssql-server:${backup_container_path}" "$backup_host_tmp"
+          chmod 600 "$backup_host_tmp"
+
+          copied_backup_bytes="$(stat -c %s -- "$backup_host_tmp")"
+          copied_backup_sha256="$(sha256sum -- "$backup_host_tmp" | awk '{print $1}')"
+          test "$copied_backup_bytes" = "$source_backup_bytes"
+          test "$copied_backup_sha256" = "$source_backup_sha256"
+
+          mv -T -- "$backup_host_tmp" "$backup_host_path"
           test -s "$backup_host_path"
-          backup_bytes="$(stat -c %s "$backup_host_path")"
-          backup_sha256="$(sha256sum "$backup_host_path" | awk '{print $1}')"
-          echo "Verified pre-reset backup: ${backup_host_path} (${backup_bytes} bytes, sha256 ${backup_sha256})"
+          echo "Verified pre-reset backup: ${backup_host_path} (${source_backup_bytes} bytes, sha256 ${source_backup_sha256})"
 
           docker compose -f "$admin_dir/docker-compose.prod.yml" exec -T laravel-app \
             php artisan commerce:reset-test-data \

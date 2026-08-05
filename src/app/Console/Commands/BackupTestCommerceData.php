@@ -76,6 +76,16 @@ final class BackupTestCommerceData extends Command
             throw new RuntimeException('SQL Server did not execute the backup verification statement.');
         }
 
-        $statement->closeCursor();
+        do {
+            if ($statement->columnCount() > 0) {
+                while ($statement->fetch() !== false) {
+                    // Drain every result so PDO_SQLSRV surfaces late errors.
+                }
+            }
+        } while ($statement->nextRowset());
+
+        if (! $statement->closeCursor()) {
+            throw new RuntimeException('SQL Server did not release the completed backup statement.');
+        }
     }
 }
