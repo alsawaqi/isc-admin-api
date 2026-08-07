@@ -149,6 +149,7 @@ class ProductsDepartmentsTableSeeder extends Seeder
             $department['Source_Main_Id'] = 'MAIN-'.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
             $department['Source_Main_Sequence'] = $sequence;
             $department['Hierarchy_Code_Period'] = '2025-07';
+            $department['Display_Order'] = $sequence * 1_000_000_000;
         }
         unset($department);
 

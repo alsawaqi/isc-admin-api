@@ -36,6 +36,10 @@ class ProductHierarchyImportManagementTest extends FeatureTestCase
             'id' => $job->id,
             'Status' => 'rolled_back',
         ]);
+        $this->assertDatabaseHas('Product_Hierarchy_Display_Order_State_T', [
+            'id' => 1,
+            'Revision' => 2,
+        ]);
     }
 
     public function test_rollback_is_rejected_when_imported_category_is_in_use(): void
@@ -82,6 +86,7 @@ class ProductHierarchyImportManagementTest extends FeatureTestCase
             'Slug' => 'second-export-leaf-'.strtolower(str_replace('.', '', uniqid('', true))),
             'Created_Date' => now(),
             'Created_By' => $user->id,
+            'Display_Order' => 2_000_000_000,
         ]);
 
         $response = $this->get('/api/product-hierarchy-import/export');
@@ -168,6 +173,7 @@ class ProductHierarchyImportManagementTest extends FeatureTestCase
             'Product_Department_Name_Ar' => null,
             'Created_Date' => now(),
             'Created_By' => $user->id,
+            'Display_Order' => 1_000_000_000,
         ]);
         $subDepartment = ProductSubDepartment::create([
             'Products_Departments_Id' => $department->id,
@@ -177,6 +183,7 @@ class ProductHierarchyImportManagementTest extends FeatureTestCase
             'Sub_Department_Name_Ar' => null,
             'Created_Date' => now(),
             'Created_By' => $user->id,
+            'Display_Order' => 1_000_000_000,
         ]);
         $leaf = ProductSubSubDepartment::create([
             'Product_Sub_Department_Id' => $subDepartment->id,
@@ -187,6 +194,7 @@ class ProductHierarchyImportManagementTest extends FeatureTestCase
             'Slug' => 'rollback-leaf-'.strtolower($suffix),
             'Created_Date' => now(),
             'Created_By' => $user->id,
+            'Display_Order' => 1_000_000_000,
         ]);
 
         return [$department, $subDepartment, $leaf];

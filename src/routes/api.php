@@ -23,6 +23,7 @@ use App\Http\Controllers\ProductBrandsController;
 use App\Http\Controllers\ProductDepartmentsController;
 use App\Http\Controllers\ProductDiscountController;
 use App\Http\Controllers\ProductEngagementAdminController;
+use App\Http\Controllers\ProductHierarchyDisplayOrderController;
 use App\Http\Controllers\ProductHierarchyImportController;
 use App\Http\Controllers\ProductImagesController;
 use App\Http\Controllers\ProductManufactureController;
@@ -113,11 +114,11 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::controller(ProductDepartmentsController::class)->group(function () {
         Route::get('/productdepartment', 'index');
         Route::get('/productdepartment/all', 'index_all');
-        Route::post('/productdepartment', 'store');
-        Route::post('/productdepartment/{productdepartment}', 'update');
+        Route::post('/productdepartment', 'store')->middleware('can:product category');
+        Route::post('/productdepartment/{productdepartment}', 'update')->middleware('can:product category');
         Route::get('/sub-departments/{departmentId}', 'getSubDepartments');
         Route::get('/sub-sub-departments/{subDepartmentId}', 'bySubDepartment');
-        Route::delete('/productdepartment/{productdepartment}', 'destroy');
+        Route::delete('/productdepartment/{productdepartment}', 'destroy')->middleware('can:product category');
     });
 
     Route::controller(ProductHierarchyImportController::class)
@@ -129,6 +130,15 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
             Route::post('/preview', 'preview');
             Route::post('/commit', 'commit');
             Route::post('/{job}/rollback', 'rollback');
+        });
+
+    Route::controller(ProductHierarchyDisplayOrderController::class)
+        ->prefix('product-hierarchy/display-order')
+        ->middleware('throttle:120,1')
+        ->group(function () {
+            Route::get('/', 'index');
+            Route::get('/search', 'search');
+            Route::patch('/', 'move');
         });
 
     Route::controller(UiSlidersController::class)->group(function () {
@@ -331,9 +341,9 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/productsubdepartment', 'index');
 
         Route::get('/product-departments-with-sub', 'getWithSubDepartments');
-        Route::post('/productsubdepartment', 'store');
-        Route::delete('/productsubdepartment/{productsubdepartment}', 'destroy');
-        Route::post('/productsubdepartment/{productsubdepartment}', 'update');
+        Route::post('/productsubdepartment', 'store')->middleware('can:product category');
+        Route::delete('/productsubdepartment/{productsubdepartment}', 'destroy')->middleware('can:product category');
+        Route::post('/productsubdepartment/{productsubdepartment}', 'update')->middleware('can:product category');
     });
 
     Route::controller(ProductSpecificationDescriptionController::class)->group(function () {
@@ -348,9 +358,9 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::controller(ProductSubSubDepartmentController::class)->group(function () {
         Route::get('/full-product-department-tree', 'getFullDepartmentTree');
         Route::get('/sub-sub-departments', 'index');
-        Route::post('/sub-sub-departments', 'store');
-        Route::post('/sub-sub-departments/{subsub}', 'update');
-        Route::delete('/sub-sub-departments/{productsubsub}', 'destroy');
+        Route::post('/sub-sub-departments', 'store')->middleware('can:product category');
+        Route::post('/sub-sub-departments/{subsub}', 'update')->middleware('can:product category');
+        Route::delete('/sub-sub-departments/{productsubsub}', 'destroy')->middleware('can:product category');
     });
 
     Route::controller(RolePermissionController::class)->group(function () {

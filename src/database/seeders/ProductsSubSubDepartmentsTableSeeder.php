@@ -83,6 +83,7 @@ class ProductsSubSubDepartmentsTableSeeder extends Seeder
             $parentId = (int) $subSubDepartment['Product_Sub_Department_Id'];
             $sourceSequences[$parentId] = ($sourceSequences[$parentId] ?? 0) + 1;
             $subSubDepartment['Source_Sub_Sub_Sequence'] = $sourceSequences[$parentId];
+            $subSubDepartment['Display_Order'] = $sourceSequences[$parentId] * 1_000_000_000;
             $subSubDepartment['Name_Fingerprint'] = HierarchyName::fingerprint(
                 $subSubDepartment['Product_Sub_Sub_Department_Name'],
             );

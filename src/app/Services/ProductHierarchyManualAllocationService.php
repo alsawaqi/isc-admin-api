@@ -12,25 +12,35 @@ use RuntimeException;
 
 final class ProductHierarchyManualAllocationService
 {
+    public function __construct(
+        private readonly ProductHierarchyDisplayOrderService $displayOrder,
+    ) {}
+
     /** @param array<string, mixed> $attributes */
     public function createDepartment(array $attributes): ProductDepartments
     {
         return DB::transaction(function () use ($attributes): ProductDepartments {
             $this->acquireHierarchyLock();
+            $this->displayOrder->lockRevisionState();
 
             $sequence = $this->nextSequence(
                 (int) (ProductDepartments::query()->lockForUpdate()->max('Source_Main_Sequence') ?? 0),
                 'department',
             );
             $period = now()->format('Y-m');
+            $displayOrder = $this->displayOrder->nextAppendOrder('department', null);
 
-            return ProductDepartments::create([
+            $department = ProductDepartments::create([
                 ...$attributes,
                 'Product_Department_Code' => ProductHierarchyCode::department($period, $sequence),
                 'Source_Main_Id' => 'MAIN-'.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT),
                 'Source_Main_Sequence' => $sequence,
                 'Hierarchy_Code_Period' => $period,
+                'Display_Order' => $displayOrder,
             ]);
+            $this->displayOrder->incrementRevision();
+
+            return $department;
         }, 3);
     }
 
@@ -39,6 +49,7 @@ final class ProductHierarchyManualAllocationService
     {
         return DB::transaction(function () use ($departmentId, $attributes): ProductSubDepartment {
             $this->acquireHierarchyLock();
+            $this->displayOrder->lockRevisionState();
 
             $department = ProductDepartments::query()->lockForUpdate()->findOrFail($departmentId);
             $period = $this->validatedDepartmentPeriod($department);
@@ -55,13 +66,18 @@ final class ProductHierarchyManualAllocationService
                 $period,
                 'sub_department',
             );
+            $displayOrder = $this->displayOrder->nextAppendOrder('sub_department', (int) $department->id);
 
-            return ProductSubDepartment::create([
+            $subDepartment = ProductSubDepartment::create([
                 ...$attributes,
                 'Products_Departments_Id' => $department->id,
                 'Products_Sub_Department_Code' => ProductHierarchyCode::subDepartment($period, $databaseSequence),
                 'Source_Sub_Sequence' => $sourceSequence,
+                'Display_Order' => $displayOrder,
             ]);
+            $this->displayOrder->incrementRevision();
+
+            return $subDepartment;
         }, 3);
     }
 
@@ -70,6 +86,7 @@ final class ProductHierarchyManualAllocationService
     {
         return DB::transaction(function () use ($subDepartmentId, $attributes): ProductSubSubDepartment {
             $this->acquireHierarchyLock();
+            $this->displayOrder->lockRevisionState();
 
             $subDepartment = ProductSubDepartment::query()->lockForUpdate()->findOrFail($subDepartmentId);
             $department = ProductDepartments::query()
@@ -89,13 +106,63 @@ final class ProductHierarchyManualAllocationService
                 $period,
                 'sub_sub_department',
             );
+            $displayOrder = $this->displayOrder->nextAppendOrder(
+                'sub_sub_department',
+                (int) $subDepartment->id,
+            );
 
-            return ProductSubSubDepartment::create([
+            $subSubDepartment = ProductSubSubDepartment::create([
                 ...$attributes,
                 'Product_Sub_Department_Id' => $subDepartment->id,
                 'Product_Sub_Sub_Department_Code' => ProductHierarchyCode::subSubDepartment($period, $databaseSequence),
                 'Source_Sub_Sub_Sequence' => $sourceSequence,
+                'Display_Order' => $displayOrder,
             ]);
+            $this->displayOrder->incrementRevision();
+
+            return $subSubDepartment;
+        }, 3);
+    }
+
+    /** @param array<string, mixed> $attributes */
+    public function updateSubSubDepartment(
+        ProductSubSubDepartment $subSubDepartment,
+        int $subDepartmentId,
+        array $attributes,
+    ): ProductSubSubDepartment {
+        return DB::transaction(function () use (
+            $subSubDepartment,
+            $subDepartmentId,
+            $attributes,
+        ): ProductSubSubDepartment {
+            $this->acquireHierarchyLock();
+            $this->displayOrder->lockRevisionState();
+
+            $locked = ProductSubSubDepartment::query()
+                ->lockForUpdate()
+                ->findOrFail($subSubDepartment->id);
+            ProductSubDepartment::query()->lockForUpdate()->findOrFail($subDepartmentId);
+
+            if ((int) $locked->Product_Sub_Department_Id !== $subDepartmentId) {
+                $locked->Product_Sub_Department_Id = $subDepartmentId;
+                $locked->Source_Sub_Sub_Sequence = $this->nextSequence(
+                    (int) (ProductSubSubDepartment::query()
+                        ->where('Product_Sub_Department_Id', $subDepartmentId)
+                        ->lockForUpdate()
+                        ->max('Source_Sub_Sub_Sequence') ?? 0),
+                    'sub-sub-department hierarchy',
+                );
+                $locked->Display_Order = $this->displayOrder->nextAppendOrder(
+                    'sub_sub_department',
+                    $subDepartmentId,
+                );
+            }
+
+            $locked->fill($attributes);
+            $locked->save();
+            $this->displayOrder->incrementRevision();
+
+            return $locked->refresh();
         }, 3);
     }
 

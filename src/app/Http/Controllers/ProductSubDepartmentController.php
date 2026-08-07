@@ -17,7 +17,8 @@ class ProductSubDepartmentController extends Controller
     {
         return response()->json(
             ProductSubDepartment::with('productDepartment')
-                ->orderBy('id', 'DESC')
+                ->orderBy('Products_Departments_Id')
+                ->displayOrdered()
                 ->get()
         );
     }
@@ -31,15 +32,17 @@ class ProductSubDepartmentController extends Controller
                 'Sub_Department_Name',
                 'Sub_Department_Name_Ar',
                 'Image_path',
-            );
+                'Display_Order',
+            )->displayOrdered();
         }])->select(
             'id',
             'Product_Department_Code',
             'Product_Department_Name',
 
             'created_at',
-            'updated_at'
-        )->get();
+            'updated_at',
+            'Display_Order',
+        )->displayOrdered()->get();
 
         return response()->json($departments);
     }
@@ -105,12 +108,16 @@ class ProductSubDepartmentController extends Controller
         }
     }
 
-    public function destroy(ProductSubDepartment $productsubdepartment)
-    {
+    public function destroy(
+        ProductSubDepartment $productsubdepartment,
+        \App\Services\ProductHierarchyDisplayOrderService $ordering,
+    ) {
 
         try {
 
-            $result = DB::transaction(function () use ($productsubdepartment) {
+            DB::transaction(function () use ($productsubdepartment, $ordering) {
+                $ordering->acquireHierarchyLock();
+                $ordering->lockRevisionState();
                 // Delete related sub-sub-departments
 
                 if (! empty($productsubdepartment->image_path) && Storage::disk('r2')->exists($productsubdepartment->image_path)) {
@@ -118,11 +125,10 @@ class ProductSubDepartmentController extends Controller
                 }
 
                 $productsubdepartment->delete();
-            });
+                $ordering->incrementRevision();
+            }, 3);
 
-            return response()->json([
-                'message' => $result,
-            ]);
+            return response()->json(['message' => 'Product Subcategory deleted successfully']);
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error deleting Product Subcategory: '.$e->getMessage(),

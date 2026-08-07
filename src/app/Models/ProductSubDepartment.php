@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class ProductSubDepartment extends Model
 {
-   protected $table = 'Products_Sub_Department_T';
+    protected $table = 'Products_Sub_Department_T';
 
     protected $guarded = [];
 
@@ -17,6 +17,18 @@ class ProductSubDepartment extends Model
             $model->Sub_Department_Name = HierarchyName::display($model->Sub_Department_Name);
             $model->Name_Fingerprint = HierarchyName::fingerprint($model->Sub_Department_Name);
         });
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'Display_Order' => 'integer',
+        ];
+    }
+
+    public function scopeDisplayOrdered($query)
+    {
+        return $query->orderBy('Display_Order')->orderBy('id');
     }
 
     public function productDepartment()
@@ -29,9 +41,8 @@ class ProductSubDepartment extends Model
         return $this->hasMany(ProductSubSubDepartment::class, 'Product_Sub_Department_Id', 'id');
     }
 
-
     public function department()
-        {
-            return $this->belongsTo(ProductDepartments::class, 'Products_Departments_Id', 'id');
-        }
+    {
+        return $this->belongsTo(ProductDepartments::class, 'Products_Departments_Id', 'id');
+    }
 }
