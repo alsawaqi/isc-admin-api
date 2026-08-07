@@ -5,7 +5,6 @@ namespace Database\Seeders;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 
 class ProductsDepartmentsTableSeeder extends Seeder
 {
@@ -14,10 +13,10 @@ class ProductsDepartmentsTableSeeder extends Seeder
      */
     public function run(): void
     {
-        DB::table('Products_Departments_T')->insert([
+        $departments = [
             [
-                
-                'Product_Department_Code' => 'DEPT_2025_JUL_A_000001',
+
+                'Product_Department_Code' => 'DEPT_2025_JUL_MAIN_000001',
                 'Product_Department_Name' => 'test',
                 'Product_Department_Name_Ar' => null,
                 'Touch_Screen_Status' => null,
@@ -32,8 +31,8 @@ class ProductsDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-15 07:56:16.703'),
             ],
             [
-                
-                'Product_Department_Code' => 'DEPT_2025_JUL_A_000002',
+
+                'Product_Department_Code' => 'DEPT_2025_JUL_MAIN_000002',
                 'Product_Department_Name' => 'Hydraulics',
                 'Product_Department_Name_Ar' => null,
                 'Touch_Screen_Status' => null,
@@ -48,8 +47,8 @@ class ProductsDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-16 13:17:45.077'),
             ],
             [
-                
-                'Product_Department_Code' => 'DEPT_2025_JUL_A_000003',
+
+                'Product_Department_Code' => 'DEPT_2025_JUL_MAIN_000003',
                 'Product_Department_Name' => 'Pneumatics',
                 'Product_Department_Name_Ar' => null,
                 'Touch_Screen_Status' => null,
@@ -64,8 +63,8 @@ class ProductsDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-16 13:18:15.510'),
             ],
             [
-                
-                'Product_Department_Code' => 'DEPT_2025_JUL_A_000004',
+
+                'Product_Department_Code' => 'DEPT_2025_JUL_MAIN_000004',
                 'Product_Department_Name' => 'Motors',
                 'Product_Department_Name_Ar' => null,
                 'Touch_Screen_Status' => null,
@@ -80,8 +79,8 @@ class ProductsDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-16 13:18:36.523'),
             ],
             [
-                
-                'Product_Department_Code' => 'DEPT_2025_JUL_A_000005',
+
+                'Product_Department_Code' => 'DEPT_2025_JUL_MAIN_000005',
                 'Product_Department_Name' => 'Tools',
                 'Product_Department_Name_Ar' => null,
                 'Touch_Screen_Status' => null,
@@ -96,8 +95,8 @@ class ProductsDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-16 13:18:55.213'),
             ],
             [
-                
-                'Product_Department_Code' => 'DEPT_2025_JUL_A_000006',
+
+                'Product_Department_Code' => 'DEPT_2025_JUL_MAIN_000006',
                 'Product_Department_Name' => 'Electrical Switchgear',
                 'Product_Department_Name_Ar' => null,
                 'Touch_Screen_Status' => null,
@@ -112,8 +111,8 @@ class ProductsDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-16 13:20:03.350'),
             ],
             [
-                
-                'Product_Department_Code' => 'DEPT_2025_JUL_A_000007',
+
+                'Product_Department_Code' => 'DEPT_2025_JUL_MAIN_000007',
                 'Product_Department_Name' => 'Electrical Wires & Cables',
                 'Product_Department_Name_Ar' => null,
                 'Touch_Screen_Status' => null,
@@ -128,8 +127,8 @@ class ProductsDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-16 13:22:36.297'),
             ],
             [
-                
-                'Product_Department_Code' => 'DEPT_2025_JUL_A_000008',
+
+                'Product_Department_Code' => 'DEPT_2025_JUL_MAIN_000008',
                 'Product_Department_Name' => 'Bearings',
                 'Product_Department_Name_Ar' => null,
                 'Touch_Screen_Status' => null,
@@ -143,6 +142,16 @@ class ProductsDepartmentsTableSeeder extends Seeder
                 'created_at' => Carbon::parse('2025-07-16 13:23:33.943'),
                 'updated_at' => Carbon::parse('2025-07-16 13:23:33.943'),
             ],
-        ]);
+        ];
+
+        foreach ($departments as $index => &$department) {
+            $sequence = $index + 1;
+            $department['Source_Main_Id'] = 'MAIN-'.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
+            $department['Source_Main_Sequence'] = $sequence;
+            $department['Hierarchy_Code_Period'] = '2025-07';
+        }
+        unset($department);
+
+        DB::table('Products_Departments_T')->insert($departments);
     }
 }

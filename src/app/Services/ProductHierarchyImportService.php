@@ -131,6 +131,12 @@ class ProductHierarchyImportService
             'Sub Group',
         );
         $subCodeOwners = $this->codeOwners($subRows, 'Products_Sub_Department_Code');
+        $nextSubDatabaseSequence = $this->maximumDatabaseCodeSequence(
+            $subRows,
+            'Products_Sub_Department_Code',
+            'sub_department',
+            $codePeriod,
+        );
         $resolvedSubModels = [];
 
         foreach ($parsed['hierarchy'] as $mainKey => $department) {
@@ -182,12 +188,34 @@ class ProductHierarchyImportService
                     }
                 }
 
-                $canonicalCode = $sequence === null
+                $databaseSequence = null;
+                if ($status !== 'conflict') {
+                    $databaseSequence = $model
+                        ? $this->databaseCodeSequence(
+                            $model->Products_Sub_Department_Code,
+                            'sub_department',
+                            $departmentPlan['code_period'],
+                        )
+                        : null;
+                    if ($databaseSequence === null) {
+                        $databaseSequence = $this->allocateSequence(
+                            $nextSubDatabaseSequence,
+                            $issues,
+                            $sub['first_row'],
+                            'sub_database_sequence_exhausted',
+                            'No more global Sub Group database-code sequences are available for '.$departmentPlan['code_period'].'.',
+                        );
+                        if ($databaseSequence === null) {
+                            $status = 'conflict';
+                        }
+                    }
+                }
+
+                $canonicalCode = $databaseSequence === null
                     ? null
                     : ProductHierarchyCode::subDepartment(
                         $departmentPlan['code_period'],
-                        $departmentPlan['main_sequence'],
-                        $sequence,
+                        $databaseSequence,
                     );
                 $code = [
                     'actual_code' => $model?->Products_Sub_Department_Code,
@@ -207,7 +235,7 @@ class ProductHierarchyImportService
                         $model?->Products_Sub_Department_Code,
                         $model?->id,
                         $status === 'create',
-                        'sub:'.$departmentPlan['main_sequence'].':'.$sequence,
+                        'sub:'.$departmentPlan['code_period'].':'.$databaseSequence,
                     );
                     if ($code['conflict']) {
                         $status = 'conflict';
@@ -221,6 +249,7 @@ class ProductHierarchyImportService
                     'status' => $status,
                     'database_id' => $model?->id,
                     'sub_sequence' => $sequence,
+                    'database_code_sequence' => $databaseSequence,
                     'link_fields' => $status === 'conflict' ? [] : $linkFields,
                     ...$code,
                     'sub_sub_departments' => [],
@@ -256,6 +285,12 @@ class ProductHierarchyImportService
             'Sub Sub Category',
         );
         $leafCodeOwners = $this->codeOwners($leafRows, 'Product_Sub_Sub_Department_Code');
+        $nextLeafDatabaseSequence = $this->maximumDatabaseCodeSequence(
+            $leafRows,
+            'Product_Sub_Sub_Department_Code',
+            'sub_sub_department',
+            $codePeriod,
+        );
         $slugOwners = [];
         foreach ($leafRows as $leafRow) {
             if ($leafRow->Slug) {
@@ -313,13 +348,34 @@ class ProductHierarchyImportService
                         }
                     }
 
-                    $canonicalCode = $sequence === null || $subPlan['sub_sequence'] === null
+                    $databaseSequence = null;
+                    if ($status !== 'conflict') {
+                        $databaseSequence = $model
+                            ? $this->databaseCodeSequence(
+                                $model->Product_Sub_Sub_Department_Code,
+                                'sub_sub_department',
+                                $plan[$mainKey]['code_period'],
+                            )
+                            : null;
+                        if ($databaseSequence === null) {
+                            $databaseSequence = $this->allocateSequence(
+                                $nextLeafDatabaseSequence,
+                                $issues,
+                                $leaf['first_row'],
+                                'sub_sub_database_sequence_exhausted',
+                                'No more global Sub Sub Category database-code sequences are available for '.$plan[$mainKey]['code_period'].'.',
+                            );
+                            if ($databaseSequence === null) {
+                                $status = 'conflict';
+                            }
+                        }
+                    }
+
+                    $canonicalCode = $databaseSequence === null
                         ? null
                         : ProductHierarchyCode::subSubDepartment(
                             $plan[$mainKey]['code_period'],
-                            $plan[$mainKey]['main_sequence'],
-                            $subPlan['sub_sequence'],
-                            $sequence,
+                            $databaseSequence,
                         );
                     $code = [
                         'actual_code' => $model?->Product_Sub_Sub_Department_Code,
@@ -339,7 +395,7 @@ class ProductHierarchyImportService
                             $model?->Product_Sub_Sub_Department_Code,
                             $model?->id,
                             $status === 'create',
-                            'leaf:'.$plan[$mainKey]['main_sequence'].':'.$subPlan['sub_sequence'].':'.$sequence,
+                            'leaf:'.$plan[$mainKey]['code_period'].':'.$databaseSequence,
                         );
                         if ($code['conflict']) {
                             $status = 'conflict';
@@ -373,6 +429,7 @@ class ProductHierarchyImportService
                         'status' => $status,
                         'database_id' => $model?->id,
                         'sub_sub_sequence' => $sequence,
+                        'database_code_sequence' => $databaseSequence,
                         'link_fields' => $status === 'conflict' ? [] : $linkFields,
                         'slug' => $slug,
                         ...$code,
@@ -1136,6 +1193,46 @@ class ProductHierarchyImportService
         }
 
         return $owners;
+    }
+
+    private function maximumDatabaseCodeSequence(
+        Collection $rows,
+        string $column,
+        string $type,
+        string $period,
+    ): int {
+        $maximum = 0;
+
+        foreach ($rows as $row) {
+            $sequence = $this->databaseCodeSequence($row->{$column}, $type, $period);
+            if ($sequence !== null) {
+                $maximum = max($maximum, $sequence);
+            }
+        }
+
+        return $maximum;
+    }
+
+    private function databaseCodeSequence(mixed $code, string $type, string $period): ?int
+    {
+        $code = trim((string) $code);
+        if ($code === '') {
+            return null;
+        }
+
+        try {
+            $parsed = match ($type) {
+                'sub_department' => ProductHierarchyCode::parseSubDepartment($code),
+                'sub_sub_department' => ProductHierarchyCode::parseSubSubDepartment($code),
+                default => throw new InvalidArgumentException('Unknown hierarchy database-code type.'),
+            };
+        } catch (InvalidArgumentException) {
+            return null;
+        }
+
+        return $parsed['period'] === ProductHierarchyCode::normalizePeriod($period)
+            ? (int) $parsed['sequence']
+            : null;
     }
 
     /** @return array{actual_code: ?string, canonical_code: string, code: ?string, legacy_code: bool, conflict: bool} */

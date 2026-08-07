@@ -8,6 +8,7 @@ use App\Models\ProductSubDepartment;
 use App\Models\ProductSubSubDepartment;
 use App\Models\SecurityPermission;
 use App\Models\User;
+use App\Support\ProductHierarchyCode;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\FeatureTestCase;
@@ -70,10 +71,11 @@ class ProductHierarchyImportManagementTest extends FeatureTestCase
     public function test_hierarchy_export_returns_excel_with_names_and_codes(): void
     {
         $user = $this->actingAsImportAdmin();
-        [$department, $subDepartment] = $this->createHierarchy($user);
+        [$department, $subDepartment, $leaf] = $this->createHierarchy($user);
+        $secondLeafCode = ProductHierarchyCode::subSubDepartment('2026-08', random_int(900000, 999999));
         ProductSubSubDepartment::create([
             'Product_Sub_Department_Id' => $subDepartment->id,
-            'Product_Sub_Sub_Department_Code' => $subDepartment->Products_Sub_Department_Code.'_SUBSUB_000002',
+            'Product_Sub_Sub_Department_Code' => $secondLeafCode,
             'Source_Sub_Sub_Sequence' => 2,
             'Product_Sub_Sub_Department_Name' => 'Second Export Leaf '.uniqid(),
             'Product_Sub_Sub_Department_Name_Ar' => null,
@@ -105,6 +107,35 @@ class ProductHierarchyImportManagementTest extends FeatureTestCase
         $this->assertStringContainsString('<t>Sub Sub Categories</t>', $sheet);
         $this->assertStringContainsString($department->Product_Department_Name, $sheet);
         $this->assertStringContainsString($department->Product_Department_Code, $sheet);
+        $this->assertStringContainsString(
+            ProductHierarchyCode::exportSubDepartment(
+                $department->Hierarchy_Code_Period,
+                $department->Source_Main_Sequence,
+                $subDepartment->Source_Sub_Sequence,
+            ),
+            $sheet,
+        );
+        $this->assertStringContainsString(
+            ProductHierarchyCode::exportSubSubDepartment(
+                $department->Hierarchy_Code_Period,
+                $department->Source_Main_Sequence,
+                $subDepartment->Source_Sub_Sequence,
+                1,
+            ),
+            $sheet,
+        );
+        $this->assertStringContainsString(
+            ProductHierarchyCode::exportSubSubDepartment(
+                $department->Hierarchy_Code_Period,
+                $department->Source_Main_Sequence,
+                $subDepartment->Source_Sub_Sequence,
+                2,
+            ),
+            $sheet,
+        );
+        $this->assertStringNotContainsString($subDepartment->Products_Sub_Department_Code, $sheet);
+        $this->assertStringNotContainsString($leaf->Product_Sub_Sub_Department_Code, $sheet);
+        $this->assertStringNotContainsString($secondLeafCode, $sheet);
         $this->assertSame(1, substr_count($sheet, $department->Product_Department_Name));
         $this->assertSame(1, substr_count($sheet, $subDepartment->Sub_Department_Name));
     }
@@ -127,6 +158,7 @@ class ProductHierarchyImportManagementTest extends FeatureTestCase
     {
         $suffix = strtoupper(substr(str_replace('.', '', uniqid('', true)), -10));
         $sequence = random_int(700000, 799999);
+        $storageSequence = random_int(800000, 899999);
         $department = ProductDepartments::create([
             'Product_Department_Code' => 'DEPT_2026_AUG_MAIN_'.$sequence,
             'Source_Main_Id' => 'MAIN-'.$sequence,
@@ -139,7 +171,7 @@ class ProductHierarchyImportManagementTest extends FeatureTestCase
         ]);
         $subDepartment = ProductSubDepartment::create([
             'Products_Departments_Id' => $department->id,
-            'Products_Sub_Department_Code' => 'SUBDEPT_2026_AUG_MAIN_'.$sequence.'_SUB_000001',
+            'Products_Sub_Department_Code' => 'SUBDEPT_2026_AUG_SUB_'.$storageSequence,
             'Source_Sub_Sequence' => 1,
             'Sub_Department_Name' => 'Rollback Sub '.$suffix,
             'Sub_Department_Name_Ar' => null,
@@ -148,7 +180,7 @@ class ProductHierarchyImportManagementTest extends FeatureTestCase
         ]);
         $leaf = ProductSubSubDepartment::create([
             'Product_Sub_Department_Id' => $subDepartment->id,
-            'Product_Sub_Sub_Department_Code' => 'SUBSUBDEPT_2026_AUG_MAIN_'.$sequence.'_SUB_000001_SUBSUB_000001',
+            'Product_Sub_Sub_Department_Code' => 'SUBSUBDEPT_2026_AUG_SUBSUB_'.$storageSequence,
             'Source_Sub_Sub_Sequence' => 1,
             'Product_Sub_Sub_Department_Name' => 'Rollback Leaf '.$suffix,
             'Product_Sub_Sub_Department_Name_Ar' => null,

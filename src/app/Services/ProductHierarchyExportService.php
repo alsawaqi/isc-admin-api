@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Support\ProductHierarchyCode;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use RuntimeException;
 use ZipArchive;
 
@@ -71,13 +73,14 @@ class ProductHierarchyExportService
                 'd.id as department_id',
                 'd.Source_Main_Id as source_main_id',
                 'd.Source_Main_Sequence as source_main_sequence',
+                'd.Hierarchy_Code_Period as hierarchy_code_period',
                 'd.Product_Department_Name as department_name',
-                'd.Product_Department_Code as department_code',
                 's.id as sub_department_id',
+                's.Source_Sub_Sequence as source_sub_sequence',
                 's.Sub_Department_Name as sub_department_name',
-                's.Products_Sub_Department_Code as sub_department_code',
+                'l.id as sub_sub_department_id',
+                'l.Source_Sub_Sub_Sequence as source_sub_sub_sequence',
                 'l.Product_Sub_Sub_Department_Name as sub_sub_department_name',
-                'l.Product_Sub_Sub_Department_Code as sub_sub_department_code',
             ])
             ->orderByRaw('COALESCE(d.Source_Main_Sequence, 2147483647)')
             ->orderBy('d.Product_Department_Name')
@@ -120,12 +123,64 @@ class ProductHierarchyExportService
             $showDepartment ? (string) ($item->source_main_sequence ?? '') : '',
             $showDepartment ? $this->sourceMainId($item->source_main_id, $item->source_main_sequence) : '',
             $showDepartment ? (string) ($item->department_name ?? '') : '',
-            $showDepartment ? (string) ($item->department_code ?? '') : '',
+            $showDepartment ? $this->departmentCode($item) : '',
             $showSubDepartment ? (string) ($item->sub_department_name ?? '') : '',
-            $showSubDepartment ? (string) ($item->sub_department_code ?? '') : '',
+            $showSubDepartment ? $this->subDepartmentCode($item) : '',
             (string) ($item->sub_sub_department_name ?? ''),
-            (string) ($item->sub_sub_department_code ?? ''),
+            $item->sub_sub_department_name === null ? '' : $this->subSubDepartmentCode($item),
         ];
+    }
+
+    private function departmentCode(object $item): string
+    {
+        return $this->withValidHierarchyMetadata(
+            fn (): string => ProductHierarchyCode::department(
+                (string) $item->hierarchy_code_period,
+                (int) $item->source_main_sequence,
+            ),
+            'department',
+            (int) $item->department_id,
+        );
+    }
+
+    private function subDepartmentCode(object $item): string
+    {
+        return $this->withValidHierarchyMetadata(
+            fn (): string => ProductHierarchyCode::exportSubDepartment(
+                (string) $item->hierarchy_code_period,
+                (int) $item->source_main_sequence,
+                (int) $item->source_sub_sequence,
+            ),
+            'sub-department',
+            (int) $item->sub_department_id,
+        );
+    }
+
+    private function subSubDepartmentCode(object $item): string
+    {
+        return $this->withValidHierarchyMetadata(
+            fn (): string => ProductHierarchyCode::exportSubSubDepartment(
+                (string) $item->hierarchy_code_period,
+                (int) $item->source_main_sequence,
+                (int) $item->source_sub_sequence,
+                (int) $item->source_sub_sub_sequence,
+            ),
+            'sub-sub-department',
+            (int) ($item->sub_sub_department_id ?? 0),
+        );
+    }
+
+    private function withValidHierarchyMetadata(callable $code, string $type, int $id): string
+    {
+        try {
+            return $code();
+        } catch (InvalidArgumentException $exception) {
+            throw new RuntimeException(
+                "The {$type} record {$id} cannot be exported because its hierarchy metadata is incomplete.",
+                422,
+                $exception,
+            );
+        }
     }
 
     /** @param array<int, array<int, string>> $rows */

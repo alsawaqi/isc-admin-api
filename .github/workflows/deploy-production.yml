@@ -96,6 +96,9 @@ jobs:
           test "$(git rev-parse origin/master)" = "$deploy_sha"
           git merge-base --is-ancestor HEAD "$deploy_sha"
 
+          git show "$deploy_sha:src/scripts/preflight-product-hierarchy-recode.php" \
+            | docker compose -f docker-compose.prod.yml exec -T laravel-app php
+
           deployment_failed() {
             docker compose -f docker-compose.prod.yml exec -T laravel-app \
               php artisan down --retry=60 > /dev/null 2>&1 || true

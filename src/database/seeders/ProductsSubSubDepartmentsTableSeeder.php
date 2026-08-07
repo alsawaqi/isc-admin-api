@@ -2,20 +2,19 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
-use Illuminate\Database\Seeder;
-
-use Illuminate\Support\Facades\DB;
+use App\Support\HierarchyName;
 use Carbon\Carbon;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class ProductsSubSubDepartmentsTableSeeder extends Seeder
 {
     public function run()
     {
-        DB::table('Products_Sub_Sub_Department_T')->insert([
+        $subSubDepartments = [
             [
-                
-                'Product_Sub_Sub_Department_Code' => 'SUBSUBDEPT_2025_JUL_A_000001',
+
+                'Product_Sub_Sub_Department_Code' => 'SUBSUBDEPT_2025_JUL_SUBSUB_000001',
                 'Product_Sub_Department_Id' => 1,
                 'Product_Sub_Sub_Department_Name' => 'test 3',
                 'Product_Sub_Sub_Department_Name_Ar' => 'test 3',
@@ -30,8 +29,8 @@ class ProductsSubSubDepartmentsTableSeeder extends Seeder
                 'Slug' => 'test-3',
             ],
             [
-                
-                'Product_Sub_Sub_Department_Code' => 'SUBSUBDEPT_2025_JUL_A_000002',
+
+                'Product_Sub_Sub_Department_Code' => 'SUBSUBDEPT_2025_JUL_SUBSUB_000002',
                 'Product_Sub_Department_Id' => 6,
                 'Product_Sub_Sub_Department_Name' => 'Standard Motors',
                 'Product_Sub_Sub_Department_Name_Ar' => 'Standard Motors',
@@ -46,8 +45,8 @@ class ProductsSubSubDepartmentsTableSeeder extends Seeder
                 'Slug' => 'standard-motors',
             ],
             [
-                
-                'Product_Sub_Sub_Department_Code' => 'SUBSUBDEPT_2025_JUL_A_000003',
+
+                'Product_Sub_Sub_Department_Code' => 'SUBSUBDEPT_2025_JUL_SUBSUB_000003',
                 'Product_Sub_Department_Id' => 6,
                 'Product_Sub_Sub_Department_Name' => 'Async Explosion Proof Motors',
                 'Product_Sub_Sub_Department_Name_Ar' => 'Async Explosion Proof Motors',
@@ -62,8 +61,8 @@ class ProductsSubSubDepartmentsTableSeeder extends Seeder
                 'Slug' => 'async-explosion-proof-motors',
             ],
             [
-                
-                'Product_Sub_Sub_Department_Code' => 'SUBSUBDEPT_2025_JUL_A_000004',
+
+                'Product_Sub_Sub_Department_Code' => 'SUBSUBDEPT_2025_JUL_SUBSUB_000004',
                 'Product_Sub_Department_Id' => 19,
                 'Product_Sub_Sub_Department_Name' => 'Spanners Singles',
                 'Product_Sub_Sub_Department_Name_Ar' => 'Spanners Singles',
@@ -77,6 +76,19 @@ class ProductsSubSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-19 21:02:53.393'),
                 'Slug' => 'spanners-singles',
             ],
-        ]);
+        ];
+
+        $sourceSequences = [];
+        foreach ($subSubDepartments as &$subSubDepartment) {
+            $parentId = (int) $subSubDepartment['Product_Sub_Department_Id'];
+            $sourceSequences[$parentId] = ($sourceSequences[$parentId] ?? 0) + 1;
+            $subSubDepartment['Source_Sub_Sub_Sequence'] = $sourceSequences[$parentId];
+            $subSubDepartment['Name_Fingerprint'] = HierarchyName::fingerprint(
+                $subSubDepartment['Product_Sub_Sub_Department_Name'],
+            );
+        }
+        unset($subSubDepartment);
+
+        DB::table('Products_Sub_Sub_Department_T')->insert($subSubDepartments);
     }
 }

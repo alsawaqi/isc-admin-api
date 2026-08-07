@@ -54,14 +54,26 @@ final class ProductHierarchyCode
         return 'DEPT_'.self::periodSegment($period).'_MAIN_'.self::sequence($mainSequence);
     }
 
-    public static function subDepartment(string $period, int $mainSequence, int $subSequence): string
+    public static function subDepartment(string $period, int $subSequence): string
+    {
+        return 'SUBDEPT_'.self::periodSegment($period)
+            .'_SUB_'.self::sequence($subSequence);
+    }
+
+    public static function subSubDepartment(string $period, int $subSubSequence): string
+    {
+        return 'SUBSUBDEPT_'.self::periodSegment($period)
+            .'_SUBSUB_'.self::sequence($subSubSequence);
+    }
+
+    public static function exportSubDepartment(string $period, int $mainSequence, int $subSequence): string
     {
         return 'SUBDEPT_'.self::periodSegment($period)
             .'_MAIN_'.self::sequence($mainSequence)
             .'_SUB_'.self::sequence($subSequence);
     }
 
-    public static function subSubDepartment(
+    public static function exportSubSubDepartment(
         string $period,
         int $mainSequence,
         int $subSequence,
@@ -71,6 +83,26 @@ final class ProductHierarchyCode
             .'_MAIN_'.self::sequence($mainSequence)
             .'_SUB_'.self::sequence($subSequence)
             .'_SUBSUB_'.self::sequence($subSubSequence);
+    }
+
+    /** @return array{period: string, sequence: int, sequence_code: string} */
+    public static function parseSubDepartment(string $value): array
+    {
+        return self::parseStoredChildCode(
+            $value,
+            '/^SUBDEPT_(20\d{2})_([A-Z]{3})_SUB_(\d{6})$/D',
+            'Sub-department code',
+        );
+    }
+
+    /** @return array{period: string, sequence: int, sequence_code: string} */
+    public static function parseSubSubDepartment(string $value): array
+    {
+        return self::parseStoredChildCode(
+            $value,
+            '/^SUBSUBDEPT_(20\d{2})_([A-Z]{3})_SUBSUB_(\d{6})$/D',
+            'Sub-sub-department code',
+        );
     }
 
     public static function sequence(int $value): string
@@ -86,6 +118,33 @@ final class ProductHierarchyCode
         [$year, $month] = array_map('intval', explode('-', $normalized));
 
         return sprintf('%04d_%s', $year, self::MONTHS[$month]);
+    }
+
+    /** @return array{period: string, sequence: int, sequence_code: string} */
+    private static function parseStoredChildCode(
+        string $value,
+        string $pattern,
+        string $label,
+    ): array {
+        $code = trim($value);
+        if (! preg_match($pattern, $code, $matches)) {
+            throw new InvalidArgumentException("{$label} does not use the supported storage format.");
+        }
+
+        $month = array_search($matches[2], self::MONTHS, true);
+        if ($month === false) {
+            throw new InvalidArgumentException("{$label} contains an invalid month.");
+        }
+
+        $period = self::normalizePeriod(sprintf('%s-%02d', $matches[1], $month));
+        $sequence = (int) $matches[3];
+        self::assertSequence($sequence, $label);
+
+        return [
+            'period' => $period,
+            'sequence' => $sequence,
+            'sequence_code' => self::sequence($sequence),
+        ];
     }
 
     private static function assertSequence(int $value, string $label): void

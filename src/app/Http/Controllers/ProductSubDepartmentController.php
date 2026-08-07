@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Helpers\CodeGenerator;
 use App\Models\ProductDepartments;
-use Illuminate\Support\Facades\DB;
 use App\Models\ProductSubDepartment;
-use App\Models\ProductSubSubDepartment;
+use App\Services\ProductHierarchyManualAllocationService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class ProductSubDepartmentController extends Controller
@@ -22,7 +21,6 @@ class ProductSubDepartmentController extends Controller
                 ->get()
         );
     }
-
 
     public function getWithSubDepartments()
     {
@@ -46,44 +44,34 @@ class ProductSubDepartmentController extends Controller
         return response()->json($departments);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, ProductHierarchyManualAllocationService $allocator)
     {
+        $imagePath = null;
+        $imageSize = null;
+        $imageExtension = null;
+        $imageType = null;
 
-        DB::transaction(function () use ($request) {
+        if ($request->hasFile('file')) {
+            $file = $request->file('file');
+            $path = Storage::disk('r2')->put('subdepartment', $file, 'public');
+            $imagePath = $path;
+            $imageSize = $file->getSize();
+            $imageExtension = $file->getClientOriginalExtension();
+            $imageType = $file->getMimeType();
+        }
 
-            
-            $imagePath = null;
-            $imageSize = null;
-            $imageExtension = null;
-            $imageType = null;
+        $allocator->createSubDepartment((int) $request->product_department_id, [
+            'Sub_Department_Name' => $request->name,
+            'Sub_Department_Name_Ar' => $request->namear,
+            'Image_path' => $imagePath,
+            'Image_Size' => $imageSize,
+            'Image_Extension' => $imageExtension,
+            'Image_Type' => $imageType,
+            'Created_By' => $request->user()->id,
+        ]);
 
-
-            if ($request->hasFile('file')) {
-                $file = $request->file('file');
-                $path = Storage::disk('r2')->put('subdepartment', $file, 'public'); // changed to department
-                $imagePath = $path;
-                $imageSize = $file->getSize();
-                $imageExtension = $file->getClientOriginalExtension();
-                $imageType = $file->getMimeType();
-            }
-
-            $productSubDepartmentCode = CodeGenerator::createCode('SUBDEPT', 'Products_Sub_Department_T', 'Products_Sub_Department_Code');
-
-            ProductSubDepartment::create([
-                'Products_Departments_Id' => $request->product_department_id,
-                'Products_Sub_Department_Code' => $productSubDepartmentCode,
-                'Sub_Department_Name' => $request->name,
-                'Sub_Department_Name_Ar' => $request->namear,
-                'Image_path' => $imagePath,
-                'Image_Size' => $imageSize,
-                'Image_Extension' => $imageExtension,
-                'Image_Type' => $imageType,
-                'Created_By' => $request->user()->id,
-            ]);
-        });
         return response()->json(['message' => 'Product Subcategory created successfully'], 201);
     }
-
 
     public function update(ProductSubDepartment $productsubdepartment, Request $request)
     {
@@ -99,10 +87,10 @@ class ProductSubDepartmentController extends Controller
                 $file = $request->file('image');
                 $path = Storage::disk('r2')->put('subdepartment', $file, 'public');
 
-                $productsubdepartment->Image_path      = $path;
-                $productsubdepartment->Image_Size      = $file->getSize();
+                $productsubdepartment->Image_path = $path;
+                $productsubdepartment->Image_Size = $file->getSize();
                 $productsubdepartment->Image_Extension = $file->getClientOriginalExtension();
-                $productsubdepartment->Image_Type      = $file->getMimeType();
+                $productsubdepartment->Image_Type = $file->getMimeType();
             }
 
             $productsubdepartment->save();
@@ -112,7 +100,7 @@ class ProductSubDepartmentController extends Controller
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'message' => 'Error updating Product Subcategory: ' . $e->getMessage(),
+                'message' => 'Error updating Product Subcategory: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -125,22 +113,19 @@ class ProductSubDepartmentController extends Controller
             $result = DB::transaction(function () use ($productsubdepartment) {
                 // Delete related sub-sub-departments
 
-
-                if (!empty($productsubdepartment->image_path) && Storage::disk('r2')->exists($productsubdepartment->image_path)) {
+                if (! empty($productsubdepartment->image_path) && Storage::disk('r2')->exists($productsubdepartment->image_path)) {
                     Storage::disk('r2')->delete($productsubdepartment->image_path);
                 }
 
-
                 $productsubdepartment->delete();
             });
-
 
             return response()->json([
                 'message' => $result,
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'message' => 'Error deleting Product Subcategory: ' . $e->getMessage(),
+                'message' => 'Error deleting Product Subcategory: '.$e->getMessage(),
             ], 500);
         }
     }

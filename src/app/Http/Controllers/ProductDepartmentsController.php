@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Helpers\CodeGenerator;
 use App\Models\ProductDepartments;
-use Illuminate\Support\Facades\DB;
 use App\Models\ProductSubDepartment;
 use App\Models\ProductSubSubDepartment;
+use App\Services\ProductHierarchyManualAllocationService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class ProductDepartmentsController extends Controller
@@ -16,10 +16,10 @@ class ProductDepartmentsController extends Controller
 
     public function index(Request $request)
     {
-        $search   = $request->query('search');
-        $sortBy   = $request->query('sortBy', 'id');      // default
-        $sortDir  = $request->query('sortDir', 'desc');   // default
-        $perPage  = (int) $request->query('per_page', 10);
+        $search = $request->query('search');
+        $sortBy = $request->query('sortBy', 'id');      // default
+        $sortDir = $request->query('sortDir', 'desc');   // default
+        $perPage = (int) $request->query('per_page', 10);
 
         $query = ProductDepartments::query();
 
@@ -41,7 +41,6 @@ class ProductDepartmentsController extends Controller
         );
     }
 
-
     public function index_all()
     {
         return response()->json(
@@ -49,23 +48,23 @@ class ProductDepartmentsController extends Controller
         );
     }
 
-
     public function getSubDepartments($departmentId)
     {
         $subDepartments = ProductSubDepartment::where('Products_Departments_Id', $departmentId)->get();
 
         return response()->json([
-            'sub_departments' => $subDepartments
+            'sub_departments' => $subDepartments,
         ]);
     }
 
     public function bySubDepartment($subDepartmentId)
     {
         $subSubDepartments = ProductSubSubDepartment::where('Product_Sub_Department_Id', $subDepartmentId)->get();
+
         return response()->json($subSubDepartments);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, ProductHierarchyManualAllocationService $allocator)
     {
         // Validate BEFORE the try so a validation failure returns 422 (the generic
         // catch below would otherwise swallow ValidationException into a 500).
@@ -74,7 +73,7 @@ class ProductDepartmentsController extends Controller
             'namear' => 'required|string|max:255',
         ]);
 
-       try {
+        try {
             $imagePath = null;
             $imageSize = null;
             $imageExtension = null;
@@ -89,11 +88,7 @@ class ProductDepartmentsController extends Controller
                 $imageType = $file->getMimeType();
             }
 
-            $productDepartmentCode = CodeGenerator::createCode('DEPT', 'Products_Departments_T', 'Product_Department_Code');
-
-
-            ProductDepartments::create([
-                'Product_Department_Code' => $productDepartmentCode,
+            $allocator->createDepartment([
                 'Product_Department_Name' => $request->name,
                 'Product_Department_Name_Ar' => $request->namear,
                 'Image_path' => $imagePath,
@@ -104,28 +99,22 @@ class ProductDepartmentsController extends Controller
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
 
             ], 500);
         }
-    
-    
+
     }
-
-
 
     public function update(ProductDepartments $productdepartment, Request $request)
     {
 
-       //return response()->json($request->hasFile('image'), 200);
+        // return response()->json($request->hasFile('image'), 200);
 
         try {
             // You don't actually need to find again, because $productdepartment is already resolved.
 
-
-
             $department = $productdepartment; // instead of findOrFail again
-
 
             $department->Product_Department_Name = $request->name;
             $department->Product_Department_Name_Ar = $request->namear;
@@ -138,19 +127,19 @@ class ProductDepartmentsController extends Controller
                 $file = $request->file('image');
                 $path = Storage::disk('r2')->put('department', $file, 'public');
 
-                $department->Image_path      = $path;
-                $department->Image_Size      = $file->getSize();
+                $department->Image_path = $path;
+                $department->Image_Size = $file->getSize();
                 $department->Image_Extension = $file->getClientOriginalExtension();
-                $department->Image_Type      = $file->getMimeType();
+                $department->Image_Type = $file->getMimeType();
             } elseif ($request->input('remove_image') === '1') {
                 if ($department->Image_path) {
                     Storage::disk('r2')->delete($department->Image_path);
                 }
 
-                $department->Image_path      = null;
-                $department->Image_Size      = null;
+                $department->Image_path = null;
+                $department->Image_Size = null;
                 $department->Image_Extension = null;
-                $department->Image_Type      = null;
+                $department->Image_Type = null;
             }
 
             // if ($request->user()) {
@@ -172,18 +161,14 @@ class ProductDepartmentsController extends Controller
         }
     }
 
-
-
-
     public function destroy(ProductDepartments $productdepartment)
     {
         try {
             DB::transaction(function () use ($productdepartment) {
-               
-                if (!empty($productdepartment->image_path) && Storage::disk('r2')->exists($productdepartment->image_path)) {
+
+                if (! empty($productdepartment->image_path) && Storage::disk('r2')->exists($productdepartment->image_path)) {
                     Storage::disk('r2')->delete($productdepartment->image_path);
                 }
-
 
                 // Delete the product department
                 $productdepartment->delete();
@@ -191,7 +176,7 @@ class ProductDepartmentsController extends Controller
                 // Return a success response
                 return response()->json(['message' => 'Product category deleted successfully'], 200);
             });
-         } catch (\Exception $e) {
+        } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }

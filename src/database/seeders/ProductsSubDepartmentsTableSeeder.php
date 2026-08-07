@@ -2,18 +2,18 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Support\Carbon;
+use App\Support\HierarchyName;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 
 class ProductsSubDepartmentsTableSeeder extends Seeder
 {
     public function run()
     {
-        DB::table('Products_Sub_Department_T')->insert([
+        $subDepartments = [
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000001',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000001',
                 'Products_Departments_Id' => 1,
                 'Sub_Department_Name' => 'test 2',
                 'Sub_Department_Name_Ar' => 'test 2',
@@ -27,7 +27,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-15 09:09:13.197'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000002',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000002',
                 'Products_Departments_Id' => 8,
                 'Sub_Department_Name' => 'Ball Bearings',
                 'Sub_Department_Name_Ar' => 'Ball Bearings',
@@ -41,7 +41,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-16 14:14:17.223'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000003',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000003',
                 'Products_Departments_Id' => 8,
                 'Sub_Department_Name' => 'Roller Bearings',
                 'Sub_Department_Name_Ar' => 'Roller Bearings',
@@ -55,7 +55,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-16 14:16:04.837'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000004',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000004',
                 'Products_Departments_Id' => 8,
                 'Sub_Department_Name' => 'Thruster Bearings',
                 'Sub_Department_Name_Ar' => 'Thruster Bearings',
@@ -69,7 +69,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-16 14:18:28.620'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000005',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000005',
                 'Products_Departments_Id' => 8,
                 'Sub_Department_Name' => 'Pillow Blocks Bearings',
                 'Sub_Department_Name_Ar' => 'Pillow Blocks Bearings',
@@ -83,7 +83,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-16 14:19:21.683'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000006',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000006',
                 'Products_Departments_Id' => 4,
                 'Sub_Department_Name' => 'Async Motors',
                 'Sub_Department_Name_Ar' => 'Async Motors',
@@ -97,7 +97,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 09:50:00.597'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000007',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000007',
                 'Products_Departments_Id' => 4,
                 'Sub_Department_Name' => 'Stepper Motors',
                 'Sub_Department_Name_Ar' => 'Stepper Motors',
@@ -111,7 +111,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 09:50:26.073'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000008',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000008',
                 'Products_Departments_Id' => 4,
                 'Sub_Department_Name' => 'Servo Motors',
                 'Sub_Department_Name_Ar' => 'Servo Motors',
@@ -125,7 +125,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 09:50:58.770'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000009',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000009',
                 'Products_Departments_Id' => 4,
                 'Sub_Department_Name' => 'DC Motors',
                 'Sub_Department_Name_Ar' => 'DC Motors',
@@ -139,7 +139,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 09:51:16.287'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000010',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000010',
                 'Products_Departments_Id' => 2,
                 'Sub_Department_Name' => 'Hydraulic Hoses',
                 'Sub_Department_Name_Ar' => 'Hydraulic Hoses',
@@ -153,7 +153,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 21:26:36.053'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000011',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000011',
                 'Products_Departments_Id' => 2,
                 'Sub_Department_Name' => 'Hydraulic Hose Fittings',
                 'Sub_Department_Name_Ar' => 'Hydraulic Hose Fittings',
@@ -167,7 +167,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 21:35:39.680'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000012',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000012',
                 'Products_Departments_Id' => 2,
                 'Sub_Department_Name' => 'Hydraulic Quick Couplers',
                 'Sub_Department_Name_Ar' => 'Hydraulic Quick Couplers',
@@ -181,7 +181,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 21:36:23.283'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000013',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000013',
                 'Products_Departments_Id' => 2,
                 'Sub_Department_Name' => 'Hydraulic Pumps',
                 'Sub_Department_Name_Ar' => 'Hydraulic Pumps',
@@ -195,7 +195,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 21:48:24.490'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000014',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000014',
                 'Products_Departments_Id' => 2,
                 'Sub_Department_Name' => 'Hydraulic Motors',
                 'Sub_Department_Name_Ar' => 'Hydraulic Motors',
@@ -209,7 +209,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 21:49:13.827'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000015',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000015',
                 'Products_Departments_Id' => 6,
                 'Sub_Department_Name' => 'Electrical Contactors',
                 'Sub_Department_Name_Ar' => 'Electrical Contactors',
@@ -223,7 +223,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 22:14:13.550'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000016',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000016',
                 'Products_Departments_Id' => 6,
                 'Sub_Department_Name' => 'Electrical Breakers',
                 'Sub_Department_Name_Ar' => 'Electrical Breakers',
@@ -237,7 +237,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 22:15:07.307'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000017',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000017',
                 'Products_Departments_Id' => 6,
                 'Sub_Department_Name' => 'Motor Starters',
                 'Sub_Department_Name_Ar' => 'Motor Starters',
@@ -251,7 +251,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 22:16:27.253'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000018',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000018',
                 'Products_Departments_Id' => 6,
                 'Sub_Department_Name' => 'Motor Overload Protection',
                 'Sub_Department_Name_Ar' => 'Motor Overload Protection',
@@ -265,7 +265,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-17 22:17:04.180'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000019',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000019',
                 'Products_Departments_Id' => 5,
                 'Sub_Department_Name' => 'Manual Tools',
                 'Sub_Department_Name_Ar' => 'Manual Tools',
@@ -279,7 +279,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-19 20:52:50.980'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000020',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000020',
                 'Products_Departments_Id' => 5,
                 'Sub_Department_Name' => 'Power Tools',
                 'Sub_Department_Name_Ar' => 'Power Tools',
@@ -293,7 +293,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-19 20:57:10.003'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000021',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000021',
                 'Products_Departments_Id' => 7,
                 'Sub_Department_Name' => 'Electrical Low Voltage Cables',
                 'Sub_Department_Name_Ar' => 'Electrical Low Voltage Cables',
@@ -307,7 +307,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-19 22:04:46.643'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000022',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000022',
                 'Products_Departments_Id' => 7,
                 'Sub_Department_Name' => 'Electrical Medium Voltage Cables',
                 'Sub_Department_Name_Ar' => 'Electrical Medium Voltage Cables',
@@ -321,7 +321,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-19 22:05:25.987'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000023',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000023',
                 'Products_Departments_Id' => 7,
                 'Sub_Department_Name' => 'Electrical High Voltage Cables',
                 'Sub_Department_Name_Ar' => 'Electrical High Voltage Cables',
@@ -335,7 +335,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-19 22:06:07.297'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000024',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000024',
                 'Products_Departments_Id' => 3,
                 'Sub_Department_Name' => 'Pneumatic Hoses',
                 'Sub_Department_Name_Ar' => 'Pneumatic Hoses',
@@ -349,7 +349,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-19 22:33:07.807'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000025',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000025',
                 'Products_Departments_Id' => 3,
                 'Sub_Department_Name' => 'Pneumatic Fittings',
                 'Sub_Department_Name_Ar' => 'Pneumatic Fittings',
@@ -363,7 +363,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-19 22:33:53.143'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000026',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000026',
                 'Products_Departments_Id' => 3,
                 'Sub_Department_Name' => 'Pneumatic Valves',
                 'Sub_Department_Name_Ar' => 'Pneumatic Valves',
@@ -377,7 +377,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-19 22:34:41.660'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000027',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000027',
                 'Products_Departments_Id' => 3,
                 'Sub_Department_Name' => 'Pneumatic Air Filter-Regulators',
                 'Sub_Department_Name_Ar' => 'Pneumatic Air Filter-Regulators',
@@ -391,7 +391,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-19 22:35:35.303'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000028',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000028',
                 'Products_Departments_Id' => 3,
                 'Sub_Department_Name' => 'Pneumatic Jacks',
                 'Sub_Department_Name_Ar' => 'Pneumatic Jacks',
@@ -405,7 +405,7 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'updated_at' => Carbon::parse('2025-07-19 22:37:10.557'),
             ],
             [
-                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_A_000029',
+                'Products_Sub_Department_Code' => 'SUBDEPT_2025_JUL_SUB_000029',
                 'Products_Departments_Id' => 3,
                 'Sub_Department_Name' => 'Pneumatic Switches',
                 'Sub_Department_Name_Ar' => 'Pneumatic Switches',
@@ -418,7 +418,18 @@ class ProductsSubDepartmentsTableSeeder extends Seeder
                 'created_at' => Carbon::parse('2025-07-19 22:43:01.537'),
                 'updated_at' => Carbon::parse('2025-07-19 22:43:01.537'),
             ],
-            
-        ]);
+
+        ];
+
+        $sourceSequences = [];
+        foreach ($subDepartments as &$subDepartment) {
+            $parentId = (int) $subDepartment['Products_Departments_Id'];
+            $sourceSequences[$parentId] = ($sourceSequences[$parentId] ?? 0) + 1;
+            $subDepartment['Source_Sub_Sequence'] = $sourceSequences[$parentId];
+            $subDepartment['Name_Fingerprint'] = HierarchyName::fingerprint($subDepartment['Sub_Department_Name']);
+        }
+        unset($subDepartment);
+
+        DB::table('Products_Sub_Department_T')->insert($subDepartments);
     }
 }

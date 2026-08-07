@@ -5,12 +5,52 @@ namespace Tests\Unit\Products;
 use App\Models\ProductDepartments;
 use App\Models\ProductSubDepartment;
 use App\Services\ProductHierarchyImportService;
+use Illuminate\Support\Collection;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use RuntimeException;
 
 final class ProductHierarchyImportConcurrencyTest extends TestCase
 {
+    public function test_database_code_maximum_is_global_within_the_selected_period(): void
+    {
+        $rows = new Collection([
+            (object) ['Products_Sub_Department_Code' => 'SUBDEPT_2026_AUG_SUB_000004'],
+            (object) ['Products_Sub_Department_Code' => 'SUBDEPT_2026_AUG_SUB_000019'],
+            (object) ['Products_Sub_Department_Code' => 'SUBDEPT_2026_SEP_SUB_000200'],
+            (object) ['Products_Sub_Department_Code' => 'SUBDEPT_2026_AUG_MAIN_000001_SUB_000099'],
+        ]);
+
+        $maximum = $this->invokePrivate(
+            'maximumDatabaseCodeSequence',
+            $rows,
+            'Products_Sub_Department_Code',
+            'sub_department',
+            '2026-08',
+        );
+
+        $this->assertSame(19, $maximum);
+    }
+
+    public function test_compact_leaf_database_code_sequence_is_parsed_for_the_selected_period(): void
+    {
+        $this->assertSame(
+            3066,
+            $this->invokePrivate(
+                'databaseCodeSequence',
+                'SUBSUBDEPT_2026_AUG_SUBSUB_003066',
+                'sub_sub_department',
+                '2026-08',
+            ),
+        );
+        $this->assertNull($this->invokePrivate(
+            'databaseCodeSequence',
+            'SUBSUBDEPT_2026_JUL_SUBSUB_003066',
+            'sub_sub_department',
+            '2026-08',
+        ));
+    }
+
     public function test_unchanged_existing_department_still_matches_the_plan(): void
     {
         $model = new ProductDepartments([
