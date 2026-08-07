@@ -17,8 +17,8 @@ class ProductDepartmentsController extends Controller
     public function index(Request $request)
     {
         $search = $request->query('search');
-        $sortBy = $request->query('sortBy', 'id');      // default
-        $sortDir = $request->query('sortDir', 'desc');   // default
+        $sortBy = $request->query('sortBy', 'Display_Order');
+        $sortDir = strtolower((string) $request->query('sortDir', 'asc'));
         $perPage = (int) $request->query('per_page', 10);
 
         $query = ProductDepartments::query();
@@ -29,11 +29,14 @@ class ProductDepartmentsController extends Controller
         }
 
         // whitelist sortable columns
-        if (! in_array($sortBy, ['id', 'Product_Department_Name', 'created_at'])) {
-            $sortBy = 'id';
+        if (! in_array($sortBy, ['id', 'Display_Order', 'Product_Department_Name', 'created_at'], true)) {
+            $sortBy = 'Display_Order';
+        }
+        if (! in_array($sortDir, ['asc', 'desc'], true)) {
+            $sortDir = 'asc';
         }
 
-        $query->orderBy($sortBy, $sortDir);
+        $query->orderBy($sortBy, $sortDir)->orderBy('id');
 
         // return paginator (includes data + links + total + current_page)
         return response()->json(
@@ -44,13 +47,15 @@ class ProductDepartmentsController extends Controller
     public function index_all()
     {
         return response()->json(
-            ProductDepartments::orderBy('id', 'DESC')->get()
+            ProductDepartments::displayOrdered()->get()
         );
     }
 
     public function getSubDepartments($departmentId)
     {
-        $subDepartments = ProductSubDepartment::where('Products_Departments_Id', $departmentId)->get();
+        $subDepartments = ProductSubDepartment::where('Products_Departments_Id', $departmentId)
+            ->displayOrdered()
+            ->get();
 
         return response()->json([
             'sub_departments' => $subDepartments,
@@ -59,7 +64,9 @@ class ProductDepartmentsController extends Controller
 
     public function bySubDepartment($subDepartmentId)
     {
-        $subSubDepartments = ProductSubSubDepartment::where('Product_Sub_Department_Id', $subDepartmentId)->get();
+        $subSubDepartments = ProductSubSubDepartment::where('Product_Sub_Department_Id', $subDepartmentId)
+            ->displayOrdered()
+            ->get();
 
         return response()->json($subSubDepartments);
     }
@@ -161,10 +168,14 @@ class ProductDepartmentsController extends Controller
         }
     }
 
-    public function destroy(ProductDepartments $productdepartment)
-    {
+    public function destroy(
+        ProductDepartments $productdepartment,
+        \App\Services\ProductHierarchyDisplayOrderService $ordering,
+    ) {
         try {
-            DB::transaction(function () use ($productdepartment) {
+            DB::transaction(function () use ($productdepartment, $ordering) {
+                $ordering->acquireHierarchyLock();
+                $ordering->lockRevisionState();
 
                 if (! empty($productdepartment->image_path) && Storage::disk('r2')->exists($productdepartment->image_path)) {
                     Storage::disk('r2')->delete($productdepartment->image_path);
@@ -172,10 +183,10 @@ class ProductDepartmentsController extends Controller
 
                 // Delete the product department
                 $productdepartment->delete();
+                $ordering->incrementRevision();
+            }, 3);
 
-                // Return a success response
-                return response()->json(['message' => 'Product category deleted successfully'], 200);
-            });
+            return response()->json(['message' => 'Product category deleted successfully'], 200);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }

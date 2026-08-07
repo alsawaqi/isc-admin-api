@@ -17,7 +17,8 @@ class ProductSubSubDepartmentController extends Controller
     {
         return response()->json(
             ProductSubSubDepartment::with('productsubsub', 'productsubsub.productDepartment')
-                ->orderBy('id', 'DESC')
+                ->orderBy('Product_Sub_Department_Id')
+                ->displayOrdered()
                 ->get()
         );
     }
@@ -33,7 +34,7 @@ class ProductSubSubDepartmentController extends Controller
                     'Products_Sub_Department_Code',
                     'Sub_Department_Name',
                     'Sub_Department_Name_Ar',
-
+                    'Display_Order',
                 )
                     ->with([
                         'subSubDepartments' => function ($subSubQuery) {
@@ -45,17 +46,20 @@ class ProductSubSubDepartmentController extends Controller
                                 'Product_Sub_Sub_Department_Name_Ar',
                                 'Product_Sub_Sub_Department_Description',
                                 'Image_Path',
-                                'View_Options'
-                            );
-                        }]);
+                                'View_Options',
+                                'Display_Order'
+                            )->displayOrdered();
+                        }])
+                    ->displayOrdered();
             },
         ])->select(
             'id',
             'Product_Department_Code',
             'Product_Department_Name',
             'Product_Department_Name_Ar',
-            'image_path'
-        )->get();
+            'image_path',
+            'Display_Order'
+        )->displayOrdered()->get();
 
         return response()->json($departments);
     }
@@ -106,17 +110,22 @@ class ProductSubSubDepartmentController extends Controller
         ]);
     }
 
-    public function update(ProductSubSubDepartment $subsub, Request $request)
-    {
+    public function update(
+        ProductSubSubDepartment $subsub,
+        Request $request,
+        ProductHierarchyManualAllocationService $allocator,
+    ) {
+        $request->validate([
+            'Product_Sub_Department_Id' => 'sometimes|required|integer|exists:Products_Sub_Department_T,id',
+        ]);
+
         try {
-            // basic fields
-            $subsub->Product_Sub_Sub_Department_Name = $request->input('Product_Sub_Sub_Department_Name', $subsub->Product_Sub_Sub_Department_Name);
-            $subsub->Product_Sub_Sub_Department_Name_Ar = $request->input('Product_Sub_Sub_Department_Name_Ar', $subsub->Product_Sub_Sub_Department_Name_Ar);
-            $subsub->Product_Sub_Sub_Department_Description = $request->input('description', $subsub->Product_Sub_Sub_Department_Description);
-            $subsub->View_Options = $request->input('View_Options', $subsub->View_Options);
-            if ($request->has('Product_Sub_Department_Id')) {
-                $subsub->Product_Sub_Department_Id = $request->input('Product_Sub_Department_Id');
-            }
+            $attributes = [
+                'Product_Sub_Sub_Department_Name' => $request->input('Product_Sub_Sub_Department_Name', $subsub->Product_Sub_Sub_Department_Name),
+                'Product_Sub_Sub_Department_Name_Ar' => $request->input('Product_Sub_Sub_Department_Name_Ar', $subsub->Product_Sub_Sub_Department_Name_Ar),
+                'Product_Sub_Sub_Department_Description' => $request->input('description', $subsub->Product_Sub_Sub_Department_Description),
+                'View_Options' => $request->input('View_Options', $subsub->View_Options),
+            ];
 
             // image upload new
             if ($request->hasFile('image')) {
@@ -125,26 +134,33 @@ class ProductSubSubDepartmentController extends Controller
                 }
                 $file = $request->file('image');
                 $path = Storage::disk('r2')->put('subsubdepartment', $file, 'public');
-                $subsub->Image_Path = $path;
-                $subsub->Image_Size = $file->getSize();
-                $subsub->Image_Extension = $file->getClientOriginalExtension();
-                $subsub->Image_Type = $file->getMimeType();
+                $attributes['Image_Path'] = $path;
+                $attributes['Image_Size'] = $file->getSize();
+                $attributes['Image_Extension'] = $file->getClientOriginalExtension();
+                $attributes['Image_Type'] = $file->getMimeType();
             } elseif ($request->input('remove_image') === '1') {
                 if ($subsub->Image_Path) {
                     Storage::disk('r2')->delete($subsub->Image_Path);
                 }
-                $subsub->Image_Path = null;
-                $subsub->Image_Size = null;
-                $subsub->Image_Extension = null;
-                $subsub->Image_Type = null;
+                $attributes['Image_Path'] = null;
+                $attributes['Image_Size'] = null;
+                $attributes['Image_Extension'] = null;
+                $attributes['Image_Type'] = null;
             }
 
-            $subsub->save();
+            $result = $allocator->updateSubSubDepartment(
+                $subsub,
+                (int) $request->input(
+                    'Product_Sub_Department_Id',
+                    $subsub->Product_Sub_Department_Id,
+                ),
+                $attributes,
+            );
 
             return response()->json([
                 'success' => true,
                 'message' => 'Updated',
-                'data' => $subsub,
+                'data' => $result,
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
@@ -154,16 +170,21 @@ class ProductSubSubDepartmentController extends Controller
         }
     }
 
-    public function destroy(ProductSubSubDepartment $productsubsub)
-    {
+    public function destroy(
+        ProductSubSubDepartment $productsubsub,
+        \App\Services\ProductHierarchyDisplayOrderService $ordering,
+    ) {
         try {
-            DB::transaction(function () use ($productsubsub) {
+            DB::transaction(function () use ($productsubsub, $ordering) {
+                $ordering->acquireHierarchyLock();
+                $ordering->lockRevisionState();
                 // Delete the sub-sub-department
                 if (! empty($productsubsub->image_path) && Storage::disk('r2')->exists($productsubsub->image_path)) {
                     Storage::disk('r2')->delete($productsubsub->image_path);
                 }
                 $productsubsub->delete();
-            });
+                $ordering->incrementRevision();
+            }, 3);
 
             return response()->json(['message' => 'Sub-subcategory deleted successfully'], 200);
         } catch (\Exception $e) {

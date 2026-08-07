@@ -20,6 +20,13 @@ class ProductHierarchyImportService
 {
     private const CREATED_ID_KEYS = ['departments', 'sub_departments', 'sub_sub_departments'];
 
+    private ?ProductHierarchyDisplayOrderService $displayOrderService;
+
+    public function __construct(?ProductHierarchyDisplayOrderService $displayOrderService = null)
+    {
+        $this->displayOrderService = $displayOrderService;
+    }
+
     /** @return array<string, mixed> */
     public function analyze(array $parsed): array
     {
@@ -589,6 +596,8 @@ class ProductHierarchyImportService
             }
 
             $this->acquireImportLock();
+            $displayOrder = $this->displayOrder();
+            $displayOrder->lockRevisionState();
 
             $createdIds = $this->normaliseTrackedIds($result['created_ids'] ?? []);
             $linkedRecords = $this->normaliseLinkedRecords($result['linked_records'] ?? []);
@@ -612,6 +621,9 @@ class ProductHierarchyImportService
                 ),
             ];
             $metadataCleared = $this->rollbackLinkedMetadata($linkedRecords);
+            if (array_sum($deleted) > 0) {
+                $displayOrder->incrementRevision();
+            }
 
             $rollback = [
                 'job_id' => (int) $job->id,
@@ -646,6 +658,27 @@ class ProductHierarchyImportService
         $linked = ['departments' => 0, 'sub_departments' => 0, 'sub_sub_departments' => 0];
         $createdIds = ['departments' => [], 'sub_departments' => [], 'sub_sub_departments' => []];
         $linkedRecords = ['departments' => [], 'sub_departments' => [], 'sub_sub_departments' => []];
+        $displayOrder = $this->displayOrder();
+        $displayOrder->lockRevisionState();
+        $nextDisplayOrders = [];
+        $displayOrderChanged = false;
+        $allocateDisplayOrder = function (string $level, ?int $parentId) use (
+            $displayOrder,
+            &$nextDisplayOrders,
+        ): int {
+            $key = $level.':'.($parentId ?? 'root');
+            if (array_key_exists($key, $nextDisplayOrders)) {
+                $nextDisplayOrders[$key] = ProductHierarchyDisplayOrderService::appendRank(
+                    $nextDisplayOrders[$key],
+                );
+
+                return $nextDisplayOrders[$key];
+            }
+
+            $nextDisplayOrders[$key] = $displayOrder->nextAppendOrder($level, $parentId);
+
+            return $nextDisplayOrders[$key];
+        };
 
         foreach ($plan as $department) {
             if ($department['status'] === 'conflict') {
@@ -677,9 +710,11 @@ class ProductHierarchyImportService
                     'Product_Department_Name_Ar' => null,
                     'Created_Date' => now(),
                     'Created_By' => $userId,
+                    'Display_Order' => $allocateDisplayOrder('department', null),
                 ]);
                 $created['departments']++;
                 $createdIds['departments'][] = (int) $departmentModel->id;
+                $displayOrderChanged = true;
             }
 
             foreach ($department['sub_departments'] as $sub) {
@@ -720,9 +755,14 @@ class ProductHierarchyImportService
                         'Sub_Department_Name_Ar' => null,
                         'Created_Date' => now(),
                         'Created_By' => $userId,
+                        'Display_Order' => $allocateDisplayOrder(
+                            'sub_department',
+                            (int) $departmentModel->id,
+                        ),
                     ]);
                     $created['sub_departments']++;
                     $createdIds['sub_departments'][] = (int) $subModel->id;
+                    $displayOrderChanged = true;
                 }
 
                 foreach ($sub['sub_sub_departments'] as $leaf) {
@@ -765,12 +805,21 @@ class ProductHierarchyImportService
                             'Slug' => $leaf['slug'],
                             'Created_Date' => now(),
                             'Created_By' => $userId,
+                            'Display_Order' => $allocateDisplayOrder(
+                                'sub_sub_department',
+                                (int) $subModel->id,
+                            ),
                         ]);
                         $created['sub_sub_departments']++;
                         $createdIds['sub_sub_departments'][] = (int) $leafModel->id;
+                        $displayOrderChanged = true;
                     }
                 }
             }
+        }
+
+        if ($displayOrderChanged) {
+            $displayOrder->incrementRevision();
         }
 
         return [
@@ -828,6 +877,11 @@ class ProductHierarchyImportService
         }
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    private function displayOrder(): ProductHierarchyDisplayOrderService
+    {
+        return $this->displayOrderService ??= app(ProductHierarchyDisplayOrderService::class);
     }
 
     private function hasRollbackTracking(array $result): bool

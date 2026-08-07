@@ -3,8 +3,8 @@
 namespace App\Models;
 
 use App\Support\HierarchyName;
-use Illuminate\Database\Eloquent\Model;
 use Cviebrock\EloquentSluggable\Sluggable;
+use Illuminate\Database\Eloquent\Model;
 
 class ProductSubSubDepartment extends Model
 {
@@ -24,24 +24,34 @@ class ProductSubSubDepartment extends Model
         });
     }
 
+    protected function casts(): array
+    {
+        return [
+            'Display_Order' => 'integer',
+        ];
+    }
 
+    public function scopeDisplayOrdered($query)
+    {
+        return $query->orderBy('Display_Order')->orderBy('id');
+    }
 
     public function sluggable(): array
     {
         return [
             'Slug' => [
-                'source' => 'Product_Sub_Sub_Department_Name'
-            ]
+                'source' => 'Product_Sub_Sub_Department_Name',
+            ],
         ];
     }
 
-
-    public function productSubDepartment(){
+    public function productSubDepartment()
+    {
         return $this->belongsTo(ProductSubDepartment::class, 'Product_Sub_Department_Id');
     }
 
-
-    public function subDepartment(){
+    public function subDepartment()
+    {
         return $this->belongsTo(ProductSubDepartment::class, 'Product_Sub_Department_Id', 'id');
-     }
+    }
 }
