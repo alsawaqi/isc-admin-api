@@ -6,6 +6,7 @@ use App\Models\ProductDepartments;
 use App\Models\ProductSubDepartment;
 use App\Models\ProductSubSubDepartment;
 use App\Services\ProductHierarchyManualAllocationService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -36,12 +37,21 @@ class ProductDepartmentsController extends Controller
             $sortDir = 'asc';
         }
 
-        $query->orderBy($sortBy, $sortDir)->orderBy('id');
+        $this->applyIndexOrdering($query, $sortBy, $sortDir);
 
         // return paginator (includes data + links + total + current_page)
         return response()->json(
             $query->paginate($perPage)
         );
+    }
+
+    protected function applyIndexOrdering(Builder $query, string $sortBy, string $sortDir): void
+    {
+        $query->orderBy($sortBy, $sortDir);
+
+        if ($sortBy !== 'id') {
+            $query->orderBy('id');
+        }
     }
 
     public function index_all()
