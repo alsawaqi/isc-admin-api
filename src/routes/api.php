@@ -138,6 +138,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         ->group(function () {
             Route::get('/', 'index');
             Route::get('/search', 'search');
+            Route::post('/reset', 'reset');
             Route::patch('/', 'move');
         });
 

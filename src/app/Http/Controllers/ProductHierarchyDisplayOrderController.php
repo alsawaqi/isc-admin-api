@@ -113,6 +113,39 @@ final class ProductHierarchyDisplayOrderController extends Controller
         ]);
     }
 
+    public function reset(Request $request, ProductHierarchyDisplayOrderService $ordering)
+    {
+        $this->authorizeOrdering($request);
+        $validated = $request->validate([
+            'level' => ['required', 'string', 'in:department,sub_department,sub_sub_department'],
+            'parent_id' => ['nullable', 'integer', 'min:1'],
+            'revision' => ['required', 'integer', 'min:1'],
+        ]);
+
+        try {
+            $result = $ordering->resetToDefault(
+                $validated['level'],
+                isset($validated['parent_id']) ? (int) $validated['parent_id'] : null,
+                (int) $validated['revision'],
+            );
+        } catch (RuntimeException $exception) {
+            return $this->error($exception, 'The hierarchy order could not be reset.');
+        }
+
+        return response()->json([
+            'data' => null,
+            'meta' => [
+                'level' => $validated['level'],
+                'parent_id' => isset($validated['parent_id'])
+                    ? (int) $validated['parent_id']
+                    : null,
+                'revision' => $result['revision'],
+                'changed' => $result['changed'],
+                'updated_count' => $result['updated_count'],
+            ],
+        ]);
+    }
+
     private function authorizeOrdering(Request $request): void
     {
         abort_unless(
