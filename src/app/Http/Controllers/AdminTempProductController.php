@@ -954,7 +954,7 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
 
             foreach ($images as $image) {
                 if ($image->Image_Path) {
-                    Storage::disk('r2')->delete($image->Image_Path);
+                    Storage::disk('uploads')->delete($image->Image_Path);
                 }
 
                 $image->delete();

@@ -23,7 +23,7 @@ class ProductImagesController extends Controller
     {
         if ($request->hasFile('file')) {
             foreach ($request->file('file') as $file) {
-                $path = Storage::disk('r2')->put('Products', $file, 'public');
+                $path = Storage::disk('uploads')->put('Products', $file, 'public');
 
                 ProductImages::create([
                     'Product_Image_Code' => CodeGenerator::createCode('PIMG', 'Products_Images_T', 'Product_Image_Code'),
@@ -49,13 +49,13 @@ class ProductImagesController extends Controller
         ], 400);
     }
 
-    // ✅ NEW: delete one image (DB + R2)
+    // ✅ NEW: delete one image (DB + upload storage)
     public function destroy($imageId)
     {
         $img = ProductImages::findOrFail($imageId);
 
         if (!empty($img->Image_Path)) {
-            Storage::disk('r2')->delete($img->Image_Path);
+            Storage::disk('uploads')->delete($img->Image_Path);
         }
 
         $img->delete();

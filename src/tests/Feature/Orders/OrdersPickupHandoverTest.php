@@ -13,10 +13,10 @@ use Tests\FeatureTestCase;
 
 /**
  * Pickup handover: pickup-complete is gated on collector name/contact/ID image
- * (persisted to Orders_Placed_T + private R2 object), and the ID copy is only
+ * (persisted to Orders_Placed_T + private local file), and the ID copy is only
  * reachable through the presigned pickup-id-url endpoint.
  *
- * The ID-image test uses Storage::fake('r2') (same precedent as
+ * The ID-image test uses Storage::fake('private_uploads') (same precedent as
  * ProductLifecycleTest). temporaryUrl() throws on a fake disk, so the
  * pickup-id-url test only covers the 404 (no image) path.
  */
@@ -143,7 +143,7 @@ class OrdersPickupHandoverTest extends FeatureTestCase
         $this->requirePickupColumns();
         $admin = $this->actingAsAdmin();
 
-        Storage::fake('r2');
+        Storage::fake('private_uploads');
 
         $order  = $this->makeOrder();
         $lineId = $this->makeLine($order->id, $this->makeProduct()->id);
@@ -175,10 +175,10 @@ class OrdersPickupHandoverTest extends FeatureTestCase
         $lineStatus = DB::table('Orders_Placed_Details_T')->where('id', $lineId)->value('Status');
         $this->assertSame('delivered', $lineStatus);
 
-        // ID image stored on the (fake) private R2 disk under PickupIds/{id}/.
+        // ID image stored on the (fake) private local disk under PickupIds/{id}/.
         $this->assertNotNull($fresh->Pickup_Id_Image_Path);
         $this->assertStringStartsWith("PickupIds/{$order->id}/", $fresh->Pickup_Id_Image_Path);
-        Storage::disk('r2')->assertExists($fresh->Pickup_Id_Image_Path);
+        Storage::disk('private_uploads')->assertExists($fresh->Pickup_Id_Image_Path);
 
         // Process log records the collector.
         $log = OrderProcessLog::where('Orders_Placed_Id', $order->id)
@@ -216,7 +216,7 @@ class OrdersPickupHandoverTest extends FeatureTestCase
         $this->requirePickupColumns();
         $this->actingAsAdmin();
 
-        Storage::fake('r2');
+        Storage::fake('private_uploads');
 
         $order = $this->makeOrder([
             'Status'                => 'delivered',
@@ -237,7 +237,7 @@ class OrdersPickupHandoverTest extends FeatureTestCase
         $fresh = $order->fresh();
         $this->assertSame('Original Collector', $fresh->Pickup_Person_Name);
         $this->assertSame('91000000', $fresh->Pickup_Person_Contact);
-        $this->assertSame([], Storage::disk('r2')->allFiles("PickupIds/{$order->id}"));
+        $this->assertSame([], Storage::disk('private_uploads')->allFiles("PickupIds/{$order->id}"));
     }
 
     // ---------------------------------------------------------------

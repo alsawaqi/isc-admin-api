@@ -87,7 +87,7 @@ final class ResetTestCommerceData extends Command
         $this->newLine();
         $this->info($execute ? 'EXECUTION PREFLIGHT' : 'DRY-RUN PREFLIGHT');
         $this->line("Database: {$database}");
-        $this->line('R2/object storage: untouched');
+        $this->line('Local upload storage: untouched');
         $this->line('Identity values: not reseeded');
         $this->line('Order-linked support tickets to delete: '.$orderLinkedTickets);
         $this->line('Preserved slider links that may become stale: '.$staleSliderLinks);
@@ -234,7 +234,7 @@ final class ResetTestCommerceData extends Command
             $this->line('Customer loyalty balances reset: '.$loyaltyBalancesReset);
             $this->line('Credit balances reset: '.$creditBalancesReset);
             $this->line('Preserved identity/configuration tables verified: '.count($preservedCounts));
-            $this->line('R2/object-storage files were not deleted.');
+            $this->line('local-upload files were not deleted.');
 
             return self::SUCCESS;
         } catch (Throwable $exception) {

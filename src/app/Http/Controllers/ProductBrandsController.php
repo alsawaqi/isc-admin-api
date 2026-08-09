@@ -52,7 +52,7 @@ class ProductBrandsController extends Controller
 
         if ($request->hasFile('file')) {
             $file = $request->file('file');
-            $path = Storage::disk('r2')->put('brands', $file, 'public'); // changed to department
+            $path = Storage::disk('uploads')->put('brands', $file, 'public'); // changed to department
             $imagePath = $path;
             $imageSize = $file->getSize();
             $imageExtension = $file->getClientOriginalExtension();
@@ -84,7 +84,7 @@ class ProductBrandsController extends Controller
         if ($request->hasFile('image')) {
             // delete old file if exists...
             $file = $request->file('image');
-            $path = Storage::disk('r2')->put('brands', $file, 'public');
+            $path = Storage::disk('uploads')->put('brands', $file, 'public');
             $productbrand->Brands_Image_Path = $path;
             // etc metadata...
         } elseif ($request->input('remove_image') === '1') {
@@ -101,7 +101,7 @@ class ProductBrandsController extends Controller
     {
         // Optionally delete associated image file
         if ($productbrand->Brands_Image_Path) {
-            Storage::disk('r2')->delete($productbrand->Brands_Image_Path);
+            Storage::disk('uploads')->delete($productbrand->Brands_Image_Path);
         }
 
         $productbrand->delete();

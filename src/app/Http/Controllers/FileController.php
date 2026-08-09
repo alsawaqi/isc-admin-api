@@ -16,16 +16,16 @@ class FileController extends Controller
             'file' => 'required|file|max:5120',
         ]);
 
-        $path = Storage::disk('r2')->put('uploads', $request->file('file'), 'public');
+        $path = Storage::disk('uploads')->put('uploads', $request->file('file'), 'public');
 
         if (!$path) {
-            return back()->withErrors(['file' => 'File upload failed. Check your R2 configuration.']);
+            return back()->withErrors(['file' => 'File upload failed. Check your local upload storage configuration.']);
         }
 
         return back()->with([
             'success' => 'File uploaded successfully!',
             'path' => $path,
-            'url' => env('R2_PUBLIC_URL') . '/' . $path,
+            'url' => Storage::disk('uploads')->url($path),
         ]);
     }
 }

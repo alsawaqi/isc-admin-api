@@ -56,7 +56,7 @@ class ProductSubDepartmentController extends Controller
 
         if ($request->hasFile('file')) {
             $file = $request->file('file');
-            $path = Storage::disk('r2')->put('subdepartment', $file, 'public');
+            $path = Storage::disk('uploads')->put('subdepartment', $file, 'public');
             $imagePath = $path;
             $imageSize = $file->getSize();
             $imageExtension = $file->getClientOriginalExtension();
@@ -84,11 +84,11 @@ class ProductSubDepartmentController extends Controller
 
             if ($request->hasFile('image')) {
                 if ($productsubdepartment->Image_path) {
-                    Storage::disk('r2')->delete($productsubdepartment->Image_path);
+                    Storage::disk('uploads')->delete($productsubdepartment->Image_path);
                 }
 
                 $file = $request->file('image');
-                $path = Storage::disk('r2')->put('subdepartment', $file, 'public');
+                $path = Storage::disk('uploads')->put('subdepartment', $file, 'public');
 
                 $productsubdepartment->Image_path = $path;
                 $productsubdepartment->Image_Size = $file->getSize();
@@ -120,8 +120,8 @@ class ProductSubDepartmentController extends Controller
                 $ordering->lockRevisionState();
                 // Delete related sub-sub-departments
 
-                if (! empty($productsubdepartment->image_path) && Storage::disk('r2')->exists($productsubdepartment->image_path)) {
-                    Storage::disk('r2')->delete($productsubdepartment->image_path);
+                if (! empty($productsubdepartment->image_path) && Storage::disk('uploads')->exists($productsubdepartment->image_path)) {
+                    Storage::disk('uploads')->delete($productsubdepartment->image_path);
                 }
 
                 $productsubdepartment->delete();

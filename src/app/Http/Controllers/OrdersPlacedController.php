@@ -22,6 +22,7 @@ use App\Services\Payments\OfflinePaymentConfirmationService;
 use App\Services\Notifications\CustomerNotificationService;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use App\Models\OrdersPlacedDetailsCancelled;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -429,13 +430,13 @@ class OrdersPlacedController extends Controller
         }
 
         $dir = "signatures/orders/{$orderId}";
-        $path = Storage::disk('r2')->putFile($dir, $file, 'public');
+        $path = Storage::disk('uploads')->putFile($dir, $file, 'public');
 
         if (! $path) {
             throw new \RuntimeException('Signature could not be saved.');
         }
 
-        $publicUrl = rtrim(config('filesystems.disks.r2.url'), '/') . '/' . ltrim($path, '/');
+        $publicUrl = Storage::disk('uploads')->url($path);
 
         return [
             'path' => $path,
@@ -574,11 +575,11 @@ class OrdersPlacedController extends Controller
             );
 
             if ($result['idempotent'] && ! empty($signature['path'])) {
-                Storage::disk('r2')->delete($signature['path']);
+                Storage::disk('uploads')->delete($signature['path']);
             }
         } catch (\Throwable $exception) {
             if (! empty($signature['path'])) {
-                Storage::disk('r2')->delete($signature['path']);
+                Storage::disk('uploads')->delete($signature['path']);
             }
             throw $exception;
         }
@@ -854,8 +855,7 @@ class OrdersPlacedController extends Controller
     {
         // 🔧 choose the disk you actually use for signatures:
         //   'public'  → /storage/...
-        //   'r2'      → Cloudflare R2 (if configured)
-        $disk = 'public'; // change to 'r2' if needed
+        //         $disk = 'uploads';
 
         $dir = "signatures/orders/{$orderId}";
         Storage::disk($disk)->makeDirectory($dir);
@@ -870,7 +870,7 @@ class OrdersPlacedController extends Controller
 
             Storage::disk($disk)->putFileAs($dir, $file, $filename, ['visibility' => 'public']);
 
-            $url = $disk === 'public' ? Storage::url($path) : Storage::disk($disk)->path($path);
+            $url = Storage::disk($disk)->url($path);
 
             return [$path, $url, $mime];
         }
@@ -897,7 +897,7 @@ class OrdersPlacedController extends Controller
 
         Storage::disk($disk)->put($path, $binary, 'public');
 
-        $url = $disk === 'public' ? Storage::url($path) : Storage::disk($disk)->path($path);
+        $url = Storage::disk($disk)->url($path);
 
         return [$path, $url, $mime];
     }
@@ -1197,7 +1197,7 @@ class OrdersPlacedController extends Controller
 
         // IDEMPOTENCY GUARD: a delivered/collected pickup order must not be
         // re-completed — it would overwrite the persisted collector audit
-        // record, orphan the previous ID image in R2, duplicate the
+        // record, orphan the previous local ID image, duplicate the
         // PICKUP_COLLECTED log, and re-notify the customer.
         $alreadyCollected = strcasecmp((string) $order->Status, 'delivered') === 0
             || ($captureCollector && ! empty($order->Pickup_Person_Name));
@@ -1225,10 +1225,10 @@ class OrdersPlacedController extends Controller
                 'id_image'              => ['required', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:10240'],
             ]);
 
-            // Sensitive PII: store as a PRIVATE R2 object (no 'public'
+            // Sensitive PII: store as a PRIVATE local file (no 'public'
             // visibility — same as vendor documents). Viewable only via the
             // short-lived presigned URL from pickupIdUrl().
-            $idImagePath = Storage::disk('r2')->putFile('PickupIds/' . $order->id, $request->file('id_image'));
+            $idImagePath = Storage::disk('private_uploads')->putFile('PickupIds/' . $order->id, $request->file('id_image'));
 
             if (! $idImagePath) {
                 return response()->json(['message' => 'The ID image could not be saved.'], 500);
@@ -1313,7 +1313,7 @@ class OrdersPlacedController extends Controller
             });
         } catch (\Throwable $exception) {
             if ($idImagePath) {
-                Storage::disk('r2')->delete($idImagePath);
+                Storage::disk('private_uploads')->delete($idImagePath);
             }
             throw $exception;
         }
@@ -1336,7 +1336,7 @@ class OrdersPlacedController extends Controller
 
 
     /**
-     * Short-lived presigned URL to view the collector's ID image (private R2
+     * Short-lived presigned URL to view the collector's ID image (private local upload
      * object). Mirrors VendorController@documentUrl, but with NO public-url
      * fallback: ID copies are sensitive PII and must never be exposed via a
      * permanent public link.
@@ -1353,7 +1353,7 @@ class OrdersPlacedController extends Controller
             return response()->json(['message' => 'This order has no pickup ID image.'], 404);
         }
 
-        $url = Storage::disk('r2')->temporaryUrl($path, now()->addMinutes(10));
+        $url = URL::temporarySignedRoute('admin.orders-placed.pickup-id-file', now()->addMinutes(10), ['id' => $order->id]);
 
         return response()->json([
             'success' => true,
@@ -1361,6 +1361,32 @@ class OrdersPlacedController extends Controller
         ]);
     }
 
+
+
+    public function pickupIdFile($id)
+    {
+        $order = OrdersPlaced::findOrFail($id);
+
+        $path = Schema::hasColumn('Orders_Placed_T', 'Pickup_Id_Image_Path')
+            ? $order->Pickup_Id_Image_Path
+            : null;
+
+        if (! $path) {
+            abort(404, 'This order has no pickup ID image.');
+        }
+
+        $disk = Storage::disk('private_uploads');
+
+        if (! $disk->exists($path)) {
+            abort(404, 'Pickup ID image file was not found.');
+        }
+
+        $mime = $disk->mimeType($path);
+
+        return response()->file($disk->path($path), [
+            'Content-Type' => $mime ?: 'application/octet-stream',
+        ]);
+    }
 
     public function putOnHold(Request $request, $id)
     {

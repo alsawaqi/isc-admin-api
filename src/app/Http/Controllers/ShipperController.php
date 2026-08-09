@@ -151,8 +151,8 @@ class ShipperController extends Controller
             $file = $request->file('file');
 
             if ($file) {
-                // store under "shippers/{code}" on R2
-                $path = Storage::disk('r2')->put("shippers", $file, 'public');
+                // store under "shippers/{code}" in local upload storage
+                $path = Storage::disk('uploads')->put("shippers", $file, 'public');
 
                 $imagePath      = $path;
                 $imageSize      = $file->getSize();
@@ -559,10 +559,10 @@ class ShipperController extends Controller
             $file = $request->file('file');
 
             if ($shipper->Shippers_Image_Path) {
-                Storage::disk('r2')->delete($shipper->Shippers_Image_Path);
+                Storage::disk('uploads')->delete($shipper->Shippers_Image_Path);
             }
 
-            $path = Storage::disk('r2')->putFile('shippers', $file, 'public');
+            $path = Storage::disk('uploads')->putFile('shippers', $file, 'public');
 
             $shipper->Shippers_Image_Path   = $path;
             $shipper->Shippers_Size         = $file->getSize();

@@ -81,7 +81,7 @@ class ProductSubSubDepartmentController extends Controller
 
             if ($request->hasFile('file')) {
                 $file = $request->file('file');
-                $path = Storage::disk('r2')->put('subsubdepartment', $file, 'public');
+                $path = Storage::disk('uploads')->put('subsubdepartment', $file, 'public');
                 $imagePath = $path;
                 $imageSize = $file->getSize();
                 $imageExtension = $file->getClientOriginalExtension();
@@ -130,17 +130,17 @@ class ProductSubSubDepartmentController extends Controller
             // image upload new
             if ($request->hasFile('image')) {
                 if ($subsub->Image_Path) {
-                    Storage::disk('r2')->delete($subsub->Image_Path);
+                    Storage::disk('uploads')->delete($subsub->Image_Path);
                 }
                 $file = $request->file('image');
-                $path = Storage::disk('r2')->put('subsubdepartment', $file, 'public');
+                $path = Storage::disk('uploads')->put('subsubdepartment', $file, 'public');
                 $attributes['Image_Path'] = $path;
                 $attributes['Image_Size'] = $file->getSize();
                 $attributes['Image_Extension'] = $file->getClientOriginalExtension();
                 $attributes['Image_Type'] = $file->getMimeType();
             } elseif ($request->input('remove_image') === '1') {
                 if ($subsub->Image_Path) {
-                    Storage::disk('r2')->delete($subsub->Image_Path);
+                    Storage::disk('uploads')->delete($subsub->Image_Path);
                 }
                 $attributes['Image_Path'] = null;
                 $attributes['Image_Size'] = null;
@@ -179,8 +179,8 @@ class ProductSubSubDepartmentController extends Controller
                 $ordering->acquireHierarchyLock();
                 $ordering->lockRevisionState();
                 // Delete the sub-sub-department
-                if (! empty($productsubsub->image_path) && Storage::disk('r2')->exists($productsubsub->image_path)) {
-                    Storage::disk('r2')->delete($productsubsub->image_path);
+                if (! empty($productsubsub->image_path) && Storage::disk('uploads')->exists($productsubsub->image_path)) {
+                    Storage::disk('uploads')->delete($productsubsub->image_path);
                 }
                 $productsubsub->delete();
                 $ordering->incrementRevision();

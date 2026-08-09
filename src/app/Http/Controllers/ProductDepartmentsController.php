@@ -98,7 +98,7 @@ class ProductDepartmentsController extends Controller
 
             if ($request->hasFile('file')) {
                 $file = $request->file('file');
-                $path = Storage::disk('r2')->put('department', $file, 'public'); // changed to department
+                $path = Storage::disk('uploads')->put('department', $file, 'public'); // changed to department
                 $imagePath = $path;
                 $imageSize = $file->getSize();
                 $imageExtension = $file->getClientOriginalExtension();
@@ -138,11 +138,11 @@ class ProductDepartmentsController extends Controller
 
             if ($request->hasFile('image')) {
                 if ($department->Image_path) {
-                    Storage::disk('r2')->delete($department->Image_path);
+                    Storage::disk('uploads')->delete($department->Image_path);
                 }
 
                 $file = $request->file('image');
-                $path = Storage::disk('r2')->put('department', $file, 'public');
+                $path = Storage::disk('uploads')->put('department', $file, 'public');
 
                 $department->Image_path = $path;
                 $department->Image_Size = $file->getSize();
@@ -150,7 +150,7 @@ class ProductDepartmentsController extends Controller
                 $department->Image_Type = $file->getMimeType();
             } elseif ($request->input('remove_image') === '1') {
                 if ($department->Image_path) {
-                    Storage::disk('r2')->delete($department->Image_path);
+                    Storage::disk('uploads')->delete($department->Image_path);
                 }
 
                 $department->Image_path = null;
@@ -187,8 +187,8 @@ class ProductDepartmentsController extends Controller
                 $ordering->acquireHierarchyLock();
                 $ordering->lockRevisionState();
 
-                if (! empty($productdepartment->image_path) && Storage::disk('r2')->exists($productdepartment->image_path)) {
-                    Storage::disk('r2')->delete($productdepartment->image_path);
+                if (! empty($productdepartment->image_path) && Storage::disk('uploads')->exists($productdepartment->image_path)) {
+                    Storage::disk('uploads')->delete($productdepartment->image_path);
                 }
 
                 // Delete the product department

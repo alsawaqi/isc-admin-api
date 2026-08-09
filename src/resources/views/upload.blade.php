@@ -1,6 +1,6 @@
  
 <div class="container mt-5">
-    <h2>Upload File to Cloudflare R2</h2>
+    <h2>Upload File to Local Storage</h2>
 
     {{-- Success Message --}}
     @if(session('success'))
@@ -10,7 +10,7 @@
             <strong>URL:</strong> <a href="{{ session('url') }}" target="_blank">{{ session('url') }}</a>
 
              <div class="mt-2">
-                <img src="https://pub-85c3b7ddc4814c45b25c1a5fb5bdad3f.r2.dev{{ session('url') }}" alt="Uploaded File" class="img-fluid" style="max-width: 100%; max-height: 300px;">
+                <img src="{{ session('url') }}" alt="Uploaded File" class="img-fluid" style="max-width: 100%; max-height: 300px;">
                 </div>
         </div>
     @endif

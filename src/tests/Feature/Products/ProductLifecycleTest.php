@@ -16,7 +16,7 @@ use Tests\FeatureTestCase;
  * - store validation (min required, price >= min)
  * - update floor on the RESULTING price/min pair
  * - activate / deactivate endpoints
- * - destroy is a SOFT delete (images/barcodes/R2 untouched) + restore
+ * - destroy is a SOFT delete (images/barcodes/uploads untouched) + restore
  * - trashed listing filter
  * - vendor update-request price-below-floor rejection (single + bulk)
  */
@@ -258,8 +258,8 @@ class ProductLifecycleTest extends FeatureTestCase
     {
         $this->actingAsAdmin();
 
-        Storage::fake('r2');
-        Storage::disk('r2')->put('Products/lifecycle-test.jpg', 'fake-image-bytes');
+        Storage::fake('uploads');
+        Storage::disk('uploads')->put('Products/lifecycle-test.jpg', 'fake-image-bytes');
 
         $product = $this->makeMasterProduct($this->ref());
 
@@ -291,10 +291,10 @@ class ProductLifecycleTest extends FeatureTestCase
         $this->assertTrue($trashed->trashed());
         $this->assertNotNull($trashed->deleted_at);
 
-        // Images and barcodes are NOT deleted, and the R2 file is NOT touched.
+        // Images and barcodes are NOT deleted, and the uploaded file is NOT touched.
         $this->assertNotNull(ProductImages::find($image->id));
         $this->assertNotNull(ProductsBarcodes::find($barcode->id));
-        Storage::disk('r2')->assertExists('Products/lifecycle-test.jpg');
+        Storage::disk('uploads')->assertExists('Products/lifecycle-test.jpg');
     }
 
     public function test_restore_brings_a_soft_deleted_product_back(): void

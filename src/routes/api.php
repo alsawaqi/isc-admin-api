@@ -400,7 +400,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::post('/orders-placed/{id}/cancel', 'cancel');
         Route::post('/orders-placed/{id}/return-refund', 'returnRefund');
         Route::get('/orders-placed/{id}/overview', 'overview');
-        // Presigned (10 min) URL for the collector's ID image — private R2 object.
+        // Presigned (10 min) URL for the collector's ID image — private local upload object.
         Route::get('/orders-placed/{id}/pickup-id-url', 'pickupIdUrl');
         Route::get('/orders-placed/{id}', 'show');
         Route::put('/orders-placed/{id}', 'update');
@@ -528,5 +528,13 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
 
     Route::post(RoutePath::for('logout', '/logout'), [UserController::class, 'logout']);
 });
+
+Route::get('/admin/vendor-documents/{id}/file', [VendorController::class, 'documentFile'])
+    ->middleware('signed')
+    ->name('admin.vendor-documents.file');
+
+Route::get('/orders-placed/{id}/pickup-id-file', [OrdersPlacedController::class, 'pickupIdFile'])
+    ->middleware('signed')
+    ->name('admin.orders-placed.pickup-id-file');
 
 Route::post('/login', [UserController::class, 'login']);

@@ -15,6 +15,7 @@ use App\Support\Vendors\VendorOnboardingChecklist;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 
 class VendorController extends Controller
@@ -105,7 +106,7 @@ class VendorController extends Controller
 
   /**
    * Return a short-lived presigned URL to view/download a vendor document
-   * (stored on the private R2 bucket).
+   * (stored on the private local upload disk).
    */
   public function documentUrl($id)
   {
@@ -115,13 +116,34 @@ class VendorController extends Controller
       return response()->json(['message' => 'This document has no file.'], 404);
     }
 
-    try {
-      $url = Storage::disk('r2')->temporaryUrl($document->File_Path, now()->addMinutes(10));
-    } catch (\Throwable $e) {
-      $url = Storage::disk('r2')->url($document->File_Path);
-    }
+    $url = URL::temporarySignedRoute(
+      'admin.vendor-documents.file',
+      now()->addMinutes(10),
+      ['id' => $document->id]
+    );
 
     return response()->json(['url' => $url]);
+  }
+
+  public function documentFile($id)
+  {
+    $document = VendorDocument::findOrFail($id);
+
+    if (! $document->File_Path) {
+      abort(404, 'This document has no file.');
+    }
+
+    $disk = Storage::disk('private_uploads');
+
+    if (! $disk->exists($document->File_Path)) {
+      abort(404, 'Vendor document file was not found.');
+    }
+
+    $mime = $document->File_Mime ?: $disk->mimeType($document->File_Path);
+
+    return response()->file($disk->path($document->File_Path), [
+      'Content-Type' => $mime ?: 'application/octet-stream',
+    ]);
   }
 
   public function store(VendorStoreRequest $request)

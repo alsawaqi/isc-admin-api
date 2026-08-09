@@ -236,7 +236,7 @@ class ProductMasterController extends Controller
                     foreach ($request->file('file') as $file) {
 
 
-                        $path = Storage::disk('r2')->put('Products', $file, 'public');
+                        $path = Storage::disk('uploads')->put('Products', $file, 'public');
 
 
                         $imagePath = $path;
@@ -417,7 +417,7 @@ class ProductMasterController extends Controller
     {
         try {
             // Soft delete ONLY the product row. Images, barcodes and
-            // specifications (and the R2 files) are intentionally kept so
+            // specifications (and the uploaded files) are intentionally kept so
             // restore() brings the product back complete.
             $productmaster->delete();
 
