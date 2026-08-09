@@ -123,12 +123,20 @@ class ProductDepartmentsController extends Controller
 
     }
 
-    public function update(ProductDepartments $productdepartment, Request $request)
+    public function update(ProductDepartments $productdepartment, Request $request, ProductHierarchyDisplayOrderService $ordering)
     {
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'namear' => 'nullable|string|max:255',
+            'image' => 'nullable|image|max:10240',
+            'remove_image' => 'nullable|boolean',
+        ]);
 
         // return response()->json($request->hasFile('image'), 200);
 
         try {
+            $department = DB::transaction(function () use ($productdepartment, $request, $ordering) {
             // You don't actually need to find again, because $productdepartment is already resolved.
 
             $department = $productdepartment; // instead of findOrFail again
@@ -163,7 +171,11 @@ class ProductDepartmentsController extends Controller
             //     $department->Updated_By = $request->user()->id;
             // }
 
-            $department->save();
+                $department->save();
+                $ordering->incrementRevision();
+
+                return $department->refresh();
+            }, 3);
 
             return response()->json([
                 'success' => true,
