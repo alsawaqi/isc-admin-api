@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ProductDepartments;
 use App\Models\ProductSubDepartment;
 use App\Models\ProductSubSubDepartment;
+use App\Services\ProductHierarchyDisplayOrderService;
 use App\Services\ProductHierarchyManualAllocationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
