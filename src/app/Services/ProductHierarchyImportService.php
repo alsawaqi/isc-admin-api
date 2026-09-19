@@ -1232,7 +1232,11 @@ class ProductHierarchyImportService
             }
         }
 
-        return compact('byName', 'maximum', 'metadataErrors');
+        return [
+            'by_name' => $byName,
+            'maximum' => $maximum,
+            'metadata_errors' => $metadataErrors,
+        ];
     }
 
     /** @return array<string, array<string, bool>> */

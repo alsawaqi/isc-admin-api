@@ -27,7 +27,11 @@ class ProductHierarchyImportJob extends Model
 
     public static function pruneForNewPreview(int $userId): void
     {
-        static::query()->where('Expires_At', '<', now())->delete();
+        // Expires_At limits preview validity, not the lifetime of rollback/audit records.
+        static::query()
+            ->whereIn('Status', ['pending', 'expired'])
+            ->where('Expires_At', '<', now())
+            ->delete();
 
         // A newer preview supersedes an older uncommitted preview for the same administrator.
         static::query()
@@ -35,25 +39,6 @@ class ProductHierarchyImportJob extends Model
             ->where('Status', 'pending')
             ->delete();
 
-        $maximumJobs = max(1, (int) config('product_hierarchy_import.retained_jobs_per_user', 5));
-        $committedToKeep = max(0, $maximumJobs - 1);
-        $recentCommittedIds = $committedToKeep === 0
-            ? collect()
-            : static::query()
-                ->where('User_Id', $userId)
-                ->where('Status', 'committed')
-                ->latest('id')
-                ->limit($committedToKeep)
-                ->pluck('id');
-
-        $olderCommitted = static::query()
-            ->where('User_Id', $userId)
-            ->where('Status', 'committed');
-
-        if ($recentCommittedIds->isNotEmpty()) {
-            $olderCommitted->whereNotIn('id', $recentCommittedIds);
-        }
-
-        $olderCommitted->delete();
+        // Committed and rolled-back batches remain available regardless of age or count.
     }
 }
