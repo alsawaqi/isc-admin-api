@@ -506,8 +506,10 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     });
 
     Route::prefix('admin')->group(function () {
+        Route::patch('/vendor-offers/{id}', [\App\Http\Controllers\VendorOfferController::class, 'update']);
         Route::get('/products-temp/vendors', [AdminTempProductController::class, 'vendors']);
         Route::get('/products-temp/vendors/{vendorId}', [AdminTempProductController::class, 'vendorProducts']);
+        Route::get('/products-temp/{tempId}/matches', [\App\Http\Controllers\VendorProductMatchesController::class, 'index']);
         Route::get('/products-temp/{tempId}', [AdminTempProductController::class, 'show']);
         Route::get('/product-update-requests', [AdminTempProductController::class, 'approvedUpdateRequests']);
         Route::post('/product-update-requests/bulk/approve', [AdminTempProductController::class, 'bulkApproveProductUpdates']); // <-- move up (before {requestId} wildcard)

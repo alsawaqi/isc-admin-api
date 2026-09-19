@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\ProductImages;
 use App\Models\ProductMaster;
+use App\Models\ProductVendorOffer;
+use App\Services\VendorOffers;
+use App\Services\VendorOfferApproval;
 use App\Helpers\CodeGenerator;
 use Sentry\State\HubInterface;
 use App\Models\ProductsBarcodes;
@@ -37,7 +40,9 @@ class ProductMasterController extends Controller
         $subSubDepartmentId = $request->query('product_sub_sub_department_id', $request->query('sub_sub_department_id'));
         $vendorId = $request->query('vendor_id');
 
-        $query = ProductMaster::query()
+        $query = (($owner === 'vendor' || $vendorId) && \App\Services\VendorOffers::ready()
+            ? \App\Services\VendorOffers::products(ProductMaster::class, $vendorId ? (int) $vendorId : null)
+            : ProductMaster::query())
             ->with([
                 'department:id,Product_Department_Name,Product_Department_Name_Ar',
                 'subDepartment:id,Sub_Department_Name,Sub_Department_Name_Ar',
@@ -269,8 +274,12 @@ class ProductMasterController extends Controller
 
 
 
-    public function show(ProductMaster $productmaster)
+    public function show(ProductMaster $productmaster, Request $request)
     {
+        if (VendorOffers::ready() && $request->filled('vendor_offer_id')) {
+            $offer = $this->selectedOffer($request, $productmaster);
+            return response()->json(VendorOffers::overlay($productmaster, $offer, DB::table('Vendors_Master_T')->where('id', $offer->Vendor_Id)->value('Vendor_Name') ?? 'Vendor'));
+        }
         // Quantity-tier bulk prices ride along on the detail payload
         // (ordered by Min_Qty via the relation). Guarded for the deploy
         // window before the bulk-prices migration has run.
@@ -301,6 +310,23 @@ class ProductMasterController extends Controller
         }
 
         $product = ProductMaster::query()->findOrFail($id);
+        if (VendorOffers::ready() && $request->filled('vendor_offer_id')) {
+            $offer = $this->selectedOffer($request, $product);
+            $data = $request->validate(['tiers' => ['present', 'array'], 'tiers.*' => ['array']]);
+            try {
+                $offer = DB::transaction(function () use ($request, $product, $data) {
+                    $offer = $this->selectedOffer($request, $product, true);
+                    app(VendorOfferApproval::class)->replaceTiers($offer, array_values($data['tiers']));
+                    return $offer;
+                });
+            } catch (\InvalidArgumentException $e) {
+                throw ValidationException::withMessages(['tiers' => $e->getMessage()]);
+            }
+            return response()->json(['message' => 'Seller bulk prices saved.', 'data' => $offer->bulkPrices()->get()]);
+        }
+        if (VendorOffers::ready() && $product->Vendor_Id) {
+            throw ValidationException::withMessages(['vendor_offer_id' => 'Open the seller offer from Vendor Products to edit its bulk prices.']);
+        }
 
         $data = $request->validate([
             'tiers'   => ['present', 'array'],
@@ -353,6 +379,12 @@ class ProductMasterController extends Controller
 
     public function update(Request $request, ProductMaster $productmaster)
     {
+        return DB::transaction(fn () => $this->updateProductAndOffer($request, $productmaster));
+    }
+
+    private function updateProductAndOffer(Request $request, ProductMaster $productmaster)
+    {
+        $productmaster = ProductMaster::whereKey($productmaster->id)->lockForUpdate()->firstOrFail();
         $request->validate([
             'price'                 => ['nullable', 'numeric'],
             'cost'                  => ['nullable', 'numeric', 'min:0'],
@@ -371,7 +403,9 @@ class ProductMasterController extends Controller
         // the whole hydrated row back, and tiers are owned by the dedicated
         // POST /productmaster/{id}/bulk-prices endpoint — letting the array
         // through makes Eloquent try UPDATE ... SET [bulk_prices] = Array.
-        $data = $request->except(['id', 'created_at', 'updated_at', 'deleted_at', 'Is_Active', 'is_active', 'bulk_prices', 'bulkPrices', 'Bulk_Prices']);
+        $selectedOffer = VendorOffers::ready() && $request->filled('vendor_offer_id') ? $this->selectedOffer($request, $productmaster, true) : null;
+        $offerChanges = [];
+        $data = $request->except(['expected_stock', 'vendor_offer_id', 'Vendor_Offer_Id', 'Seller_Name', 'Offer_Is_Active', 'id', 'created_at', 'updated_at', 'deleted_at', 'Is_Active', 'is_active', 'bulk_prices', 'bulkPrices', 'Bulk_Prices']);
 
         // Accept the admin-UI friendly keys and map them to real columns.
         $aliases = [
@@ -384,6 +418,42 @@ class ProductMasterController extends Controller
             if (array_key_exists($alias, $data)) {
                 $data[$column] = $data[$alias] === '' ? null : $data[$alias];
                 unset($data[$alias]);
+            }
+        }
+
+        if ($selectedOffer) {
+            $request->validate(['expected_stock' => ['required', 'integer', 'min:0']]);
+            if ($request->integer('expected_stock') !== (int) $selectedOffer->Product_Stock) {
+                throw ValidationException::withMessages(['stock' => 'This seller’s stock changed while the page was open. Reload the product before saving.']);
+            }
+            $request->validate([
+                'Product_Price' => ['sometimes', 'numeric', 'min:0'], 'Product_Stock' => ['sometimes', 'integer', 'min:0'],
+                'Status' => ['sometimes', 'in:available,out_of_stock,discontinued'],
+            ]);
+            foreach (VendorOffers::FIELDS as $field) {
+                if (!in_array($field, ['Vendor_Id', 'Commission_Type', 'Commission_Value'], true) && array_key_exists($field, $data)) { $offerChanges[$field] = $data[$field]; }
+                unset($data[$field]);
+            }
+            $selectedOffer->fill($offerChanges);
+            if ($selectedOffer->Minimum_Selling_Price !== null && $selectedOffer->Product_Price < $selectedOffer->Minimum_Selling_Price) {
+                throw ValidationException::withMessages(['price' => self::priceFloorMessage($selectedOffer->Minimum_Selling_Price)]);
+            }
+            $tierErrors = BulkPriceRules::validateSet($selectedOffer->bulkPrices->toArray(), $selectedOffer->Minimum_Selling_Price !== null ? (float) $selectedOffer->Minimum_Selling_Price : null);
+            if ($tierErrors) { throw ValidationException::withMessages(['minimum_selling_price' => implode(' ', $tierErrors)]); }
+            $selectedOffer->Status = $selectedOffer->Status === 'discontinued' ? 'discontinued' : ($selectedOffer->Product_Stock > 0 ? 'available' : 'out_of_stock');
+        }
+        if (VendorOffers::ready()) {
+            if (array_key_exists('Vendor_Id', $data) && (int) $data['Vendor_Id'] !== (int) $productmaster->Vendor_Id) {
+                throw ValidationException::withMessages(['Vendor_Id' => 'Seller ownership is managed through vendor offers.']);
+            }
+            if ($productmaster->Vendor_Id) {
+                foreach (VendorOffers::FIELDS as $field) {
+                    if (array_key_exists($field, $data) && (string) $data[$field] !== (string) $productmaster->$field
+                        && (!is_numeric($data[$field]) || !is_numeric($productmaster->$field) || (float) $data[$field] !== (float) $productmaster->$field)) {
+                        throw ValidationException::withMessages([$field => 'Change seller prices, stock and commission through the vendor offer review. This page edits shared catalogue content.']);
+                    }
+                    unset($data[$field]);
+                }
             }
         }
 
@@ -408,9 +478,12 @@ class ProductMasterController extends Controller
             $data = array_merge($data, $this->normalizeShippingDimensions($request, $productmaster));
         }
 
-        $productmaster->update($data);
+        DB::transaction(function () use ($productmaster, $data, $selectedOffer) {
+            $productmaster->update($data);
+            if ($selectedOffer) { $selectedOffer->save(); }
+        });
 
-        return response()->json($productmaster->fresh());
+        return $this->show($productmaster->fresh(), $request);
     }
 
     public function destroy(ProductMaster $productmaster)
@@ -468,6 +541,13 @@ class ProductMasterController extends Controller
                 : 'Product deactivated. It is now hidden from the storefront.',
             'data'    => $productmaster->fresh(),
         ]);
+    }
+
+    private function selectedOffer(Request $request, ProductMaster $product, bool $lock = false): ProductVendorOffer
+    {
+        abort_unless($request->user()?->can('vendor requests'), 403);
+        $request->validate(['vendor_offer_id' => ['required', 'integer', 'min:1']]);
+        return ProductVendorOffer::where('Products_Id', $product->id)->when($lock, fn ($q) => $q->lockForUpdate())->findOrFail($request->integer('vendor_offer_id'));
     }
 
     private function normalizeShippingDimensions(Request $request, ProductMaster $productmaster): array

@@ -10,6 +10,7 @@ class ProductVendorRequest extends Model
     protected $table = 'Products_Vendor_Requests_T';
     
     protected $fillable = [
+        'Vendor_Offer_Id',
         'Products_Temporary_Id',
         'Products_Id',
         'Vendor_Id',

@@ -4,6 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\ProductImages;
 use App\Models\ProductMaster;
+use App\Models\ProductVendorOffer;
+use App\Services\VendorOffers;
+use App\Services\VendorOfferApproval;
+use Illuminate\Validation\ValidationException;
 use App\Models\ProductTemporary;
 use Illuminate\Http\Request;
 // If you want approve → move to master tables, import your real models:
@@ -56,7 +60,7 @@ class AdminTempProductController extends Controller
  *
  * @throws \Throwable
  */
-private function approveOne(ProductTemporary $temp, ?string $commissionType = null, ?float $commissionValue = null): int
+private function approveOne(ProductTemporary $temp, ?string $commissionType = null, ?float $commissionValue = null, ?int $matchProductId = null): int
 {
     // Make sure images relation is loaded (safe even if already eager-loaded)
     $temp->loadMissing(['images', 'specs']);
@@ -68,8 +72,31 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
 
     $approvedProductId = 0;
 
-    DB::transaction(function () use ($temp, $commissionType, $commissionValue, &$approvedProductId) {
+    DB::transaction(function () use ($temp, $commissionType, $commissionValue, $matchProductId, &$approvedProductId) {
 
+        // Serialize approvals in this category before checking for an existing identity.
+        DB::table('Products_Sub_Sub_Department_T')->where('id', $temp->Product_Sub_Sub_Department_Id)->lockForUpdate()->first();
+        $temp = ProductTemporary::withTrashed()->whereKey($temp->id)->lockForUpdate()->firstOrFail();
+        if ($temp->Submission_Status === 'approved') {
+            throw ValidationException::withMessages(['product' => 'This submission was already approved.']);
+        }
+        $temp->load(['images', 'specs']);
+        $master = null;
+        if (VendorOffers::ready() && $matchProductId) {
+            $master = ProductMaster::whereKey($matchProductId)->lockForUpdate()->firstOrFail();
+            app(VendorOfferApproval::class)->validateMatch($temp, $master);
+        }
+        if (VendorOffers::ready() && ! $matchProductId) {
+            $possible = ProductMaster::where('Product_Sub_Sub_Department_Id', $temp->Product_Sub_Sub_Department_Id)
+                ->where('Product_Name', $temp->Product_Name)->where('Product_Brand_Id', $temp->Product_Brand_Id)->get();
+            $specs = $temp->specs->pluck('product_specification_value_id', 'Product_Specification_Description_Id')->sortKeys()->all();
+            foreach ($possible as $candidate) {
+                if ($candidate->specs()->pluck('product_specification_value_id', 'Product_Specification_Description_Id')->sortKeys()->all() == $specs) {
+                    throw ValidationException::withMessages(['match_product_id' => 'A matching master product already exists. Select it instead of creating a duplicate.']);
+                }
+            }
+        }
+        if (! $master) {
         // 1) Generate Product_Code like admin store()
         $productMasterCode = CodeGenerator::createCode('PROD', 'Products_Master_T', 'Product_Code');
 
@@ -166,7 +193,14 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
         // (guarded: pre-migration environments simply skip). The set is
         // re-validated defensively — an invalid set is skipped WITH a log
         // rather than failing the whole approval.
-        $this->copyTempBulkPrices($temp, $master);
+        if (! VendorOffers::ready()) {
+            $this->copyTempBulkPrices($temp, $master);
+        }
+        }
+        $approvedProductId = $master->id;
+        $offer = VendorOffers::ready()
+            ? app(VendorOfferApproval::class)->create($temp, $master, $commissionType, $commissionValue)
+            : null;
 
         // 5) Update temp status
         $tempUpdate = [
@@ -183,10 +217,12 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
             $tempUpdate['Commission_Value'] = $commissionValue;
         }
 
+        if ($offer) { $tempUpdate['Vendor_Offer_Id'] = $offer->id; }
         $temp->update($tempUpdate);
 
         // 6) Log APPROVED in Products_Vendor_Requests_T
         ProductVendorRequest::create([
+            ...($offer ? ['Vendor_Offer_Id' => $offer->id] : []),
             'Products_Temporary_Id' => $temp->id,
             'Products_Id'           => $master->id,
             'Vendor_Id'             => $temp->Vendor_Id,
@@ -202,7 +238,7 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
 
         // 7) Back-fill Products_Id for ALL previous logs of this temp product
         ProductVendorRequest::where('Products_Temporary_Id', $temp->id)
-            ->update(['Products_Id' => $master->id]);
+            ->update(['Products_Id' => $master->id, ...($offer ? ['Vendor_Offer_Id' => $offer->id] : [])]);
 
         // 8) Soft delete temp product + temp images
         $temp->images()->delete(); // soft delete all related temp images
@@ -417,6 +453,12 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
     {
         // Validate outside try/catch so validation errors return 422, not 500.
         $commission = $this->validateCommissionInput($request);
+        $selection = VendorOffers::ready() ? $request->validate([
+            'approval_mode' => ['required', 'in:existing,new'],
+            'match_product_id' => ['required_if:approval_mode,existing', 'nullable', 'integer', 'min:1'],
+            'confirm_product_identity' => ['accepted'],
+        ]) : [];
+        if (VendorOffers::ready()) { abort_unless($request->user()?->can('vendor requests'), 403); }
 
         try {
             // If ProductTemporary uses SoftDeletes, this will also see soft-deleted rows
@@ -443,13 +485,16 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
             $approvedProductId = $this->approveOne(
                 $temp,
                 $commission['commission_type'],
-                $commission['commission_value']
+                $commission['commission_value'],
+                ($selection['approval_mode'] ?? '') === 'existing' ? (int) $selection['match_product_id'] : null
             );
 
             return response()->json([
                 'message'             => 'Approved successfully.',
                 'approved_product_id' => $approvedProductId,
             ]);
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Approval failed: ' . $e->getMessage()], 500);
         }
@@ -473,6 +518,13 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
             ], 409);
         }
 
+        if (VendorOffers::ready()) {
+            abort_unless($request->user()?->can('vendor requests'), 403);
+            $request->validate(['vendor_offer_id' => ['required', 'integer', 'min:1']]);
+            $offer = ProductVendorOffer::where('Products_Id', $productId)->findOrFail($request->integer('vendor_offer_id'));
+            $offer->update(['Commission_Type' => $commission['commission_type'], 'Commission_Value' => $commission['commission_value']]);
+            return response()->json(['success' => true, 'message' => 'Seller commission updated for future orders.']);
+        }
         $product = ProductMaster::query()->find($productId);
 
         if (! $product || is_null($product->Vendor_Id)) {
@@ -538,6 +590,7 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
 
     public function bulkApprove(Request $request)
     {
+        abort_if(VendorOffers::ready(), 409, 'Review product matches and approve each submission individually.');
         $rules = [
             'ids'   => ['required', 'array', 'min:1', 'max:200'],
             'ids.*' => ['integer'],
@@ -704,6 +757,7 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
         $fkNames = $this->resolveApprovedUpdateFkNames($page->getCollection());
 
         $page->getCollection()->transform(function ($row) use ($fkNames) {
+            $this->attachRequestedOffer($row);
             $changes = is_array($row->Requested_Changes_Json) ? $row->Requested_Changes_Json : [];
 
             $row->Requested_Changes_Display = $this->describeApprovedUpdateFieldChanges(
@@ -718,7 +772,7 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
                 (array) ($changes['image_updates'] ?? [])
             );
             $row->Requested_Bulk_Prices_Display = (array_key_exists('bulk_prices', $changes) && is_array($changes['bulk_prices']))
-                ? $this->describeBulkPriceChanges($changes['bulk_prices'], $row->masterProduct?->id)
+                ? $this->describeBulkPriceChanges($changes['bulk_prices'], $row->masterProduct?->id, $row->Vendor_Offer_Id)
                 : null;
 
             return $row;
@@ -748,6 +802,7 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
             ? $row->Requested_Changes_Json
             : [];
 
+        $this->attachRequestedOffer($row);
         $product = $row->masterProduct;
 
         $fkNames = $this->resolveApprovedUpdateFkNames(collect([$row]));
@@ -767,7 +822,7 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
             (array) ($changes['image_updates'] ?? [])
         );
         $row->Requested_Bulk_Prices_Display = (array_key_exists('bulk_prices', $changes) && is_array($changes['bulk_prices']))
-            ? $this->describeBulkPriceChanges($changes['bulk_prices'], $product?->id)
+            ? $this->describeBulkPriceChanges($changes['bulk_prices'], $product?->id, $row->Vendor_Offer_Id)
             : null;
 
         return response()->json(['data' => $row]);
@@ -871,6 +926,10 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
      */
     private function applyProductUpdateRequest(ProductVendorRequest $row, ?string $note): void
     {
+        if (VendorOffers::ready()) {
+            $this->applyVendorOfferUpdate($row, $note);
+            return;
+        }
         $payload = is_array($row->Requested_Changes_Json) ? $row->Requested_Changes_Json : [];
 
         $changes = collect($payload)
@@ -935,6 +994,38 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
                 'Action_By_Role' => 'admin',
                 'Action_At' => now(),
             ]);
+        });
+    }
+
+    private function applyVendorOfferUpdate(ProductVendorRequest $row, ?string $note): void
+    {
+        DB::transaction(function () use ($row, $note) {
+            $row = ProductVendorRequest::whereKey($row->id)->lockForUpdate()->firstOrFail();
+            if (! in_array($row->Status, self::OPEN_UPDATE_REQUEST_STATUSES, true)) {
+                throw new \InvalidArgumentException('This update request is no longer open.');
+            }
+            $offer = VendorOffers::forVendor((int) $row->Products_Id, (int) $row->Vendor_Id, true);
+            $payload = $row->Requested_Changes_Json ?? [];
+            $allowed = ['Product_Price', 'Product_Cost', 'Product_Stock', 'Status'];
+            $shared = array_diff(array_keys($payload), [...$allowed, 'bulk_prices']);
+            if ($shared) {
+                throw new \InvalidArgumentException('Shared product content must be edited separately by an administrator. Ask the vendor to resubmit only its price, stock or availability changes.');
+            }
+            $changes = array_intersect_key($payload, array_flip($allowed));
+            if (isset($changes['Product_Price']) && $offer->Minimum_Selling_Price !== null && $changes['Product_Price'] < $offer->Minimum_Selling_Price) {
+                throw new \InvalidArgumentException('Price is below this offer’s minimum selling price.');
+            }
+            if (array_key_exists('Product_Stock', $changes) || array_key_exists('Status', $changes)) {
+                $status = $changes['Status'] ?? $offer->Status;
+                $changes['Status'] = $status === 'discontinued' ? 'discontinued'
+                    : ((int) ($changes['Product_Stock'] ?? $offer->Product_Stock) > 0 ? 'available' : 'out_of_stock');
+            }
+            $offer->update($changes);
+            if (array_key_exists('bulk_prices', $payload)) {
+                app(VendorOfferApproval::class)->replaceTiers($offer, $payload['bulk_prices']);
+            }
+            $row->update(['Status' => 'approved', 'Vendor_Offer_Id' => $offer->id, 'Comment' => $note ?? $row->Comment,
+                'Action_By_User_Id' => Auth::id(), 'Action_By_Role' => 'admin', 'Action_At' => now()]);
         });
     }
 
@@ -1084,13 +1175,24 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
      * ("5-10" / "51+"). Requested values come straight from the JSON payload
      * (NOT validated here — display only).
      */
-    private function describeBulkPriceChanges(array $requested, ?int $productId): array
+    private function attachRequestedOffer(ProductVendorRequest $row): void
+    {
+        if (! VendorOffers::ready() || ! $row->masterProduct) { return; }
+        $offer = ProductVendorOffer::withTrashed()->where('Products_Id', $row->Products_Id)->where('Vendor_Id', $row->Vendor_Id)->first();
+        if ($offer) {
+            $row->setRelation('masterProduct', VendorOffers::overlay($row->masterProduct, $offer, $row->vendor?->Vendor_Name ?? 'Vendor'));
+            $row->Vendor_Offer_Id = $offer->id;
+        }
+    }
+
+    private function describeBulkPriceChanges(array $requested, ?int $productId, ?int $offerId = null): array
     {
         $current = [];
 
         if ($productId && Schema::hasTable('Products_Bulk_Prices_T')) {
-            $current = ProductBulkPrice::query()
-                ->where('Products_Id', $productId)
+            $current = ($offerId && VendorOffers::ready()
+                ? \App\Models\ProductVendorOfferBulkPrice::where('Vendor_Offer_Id', $offerId)
+                : ProductBulkPrice::where('Products_Id', $productId))
                 ->orderBy('Min_Qty')
                 ->get()
                 ->map(fn ($tier) => [
@@ -1234,6 +1336,7 @@ private function approveOne(ProductTemporary $temp, ?string $commissionType = nu
         $idsByField = [];
 
         foreach ($rows as $row) {
+            $this->attachRequestedOffer($row);
             $changes = is_array($row->Requested_Changes_Json) ? $row->Requested_Changes_Json : [];
             $product = $row->masterProduct;
 

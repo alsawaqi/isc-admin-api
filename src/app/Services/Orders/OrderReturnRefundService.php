@@ -188,28 +188,29 @@ class OrderReturnRefundService
 
     private function restockProduct(OrdersPlacedDetails $detail, int $quantity, ?object $actor, string $reason): void
     {
-        $product = ProductMaster::query()
-            ->where('id', $detail->Products_Id)
-            ->lockForUpdate()
-            ->first();
+        $stockQuery = \App\Services\VendorOffers::stockRecord((int) $detail->Products_Id,
+            $detail->Vendor_Offer_Id ? (int) $detail->Vendor_Offer_Id : null,
+            $detail->Vendor_Id ? (int) $detail->Vendor_Id : null);
+        $product = (clone $stockQuery)->first();
 
         if (!$product) {
-            return;
+            throw new \InvalidArgumentException('The original seller inventory is missing; the return cannot be restocked.');
         }
 
         $previousStock = (int) ($product->Product_Stock ?? 0);
         $newStock = $previousStock + $quantity;
         $currentStatus = (string) ($product->Status ?? 'available');
 
-        $product->forceFill([
+        $stockQuery->update([
+            'updated_at' => now(),
             'Product_Stock' => $newStock,
             'Status' => $currentStatus === 'discontinued'
                 ? 'discontinued'
                 : ($newStock > 0 ? 'available' : 'out_of_stock'),
-        ])->save();
+        ]);
 
         ProductStockMovement::create([
-            'Products_Id' => $product->id,
+            'Products_Id' => $detail->Products_Id,
             'Vendor_Id' => $detail->Vendor_Id,
             'Movement_Type' => 'return_restock',
             'Quantity_Delta' => $quantity,

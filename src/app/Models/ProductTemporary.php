@@ -12,6 +12,7 @@ class ProductTemporary extends Model
     protected $table = 'Products_Temporary_T';
 
     protected $fillable = [
+        'Vendor_Offer_Id',
         'Vendor_Id',
         'Temp_Product_Code',
 

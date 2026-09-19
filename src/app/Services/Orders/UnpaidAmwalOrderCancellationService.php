@@ -178,10 +178,10 @@ final class UnpaidAmwalOrderCancellationService
 
             $now = now();
             $quantitiesByProduct = $activeDetails
-                ->groupBy(fn ($detail) => (int) $detail->Products_Id)
+                ->groupBy(fn ($detail) => $detail->Products_Id.':'.($detail->Vendor_Offer_Id ?? ('vendor-'.($detail->Vendor_Id ?? 'own'))))
                 ->map(fn ($details) => (int) $details->sum(fn ($detail) => (int) $detail->Quantity));
             $detailIdsByProduct = $activeDetails
-                ->groupBy(fn ($detail) => (int) $detail->Products_Id)
+                ->groupBy(fn ($detail) => $detail->Products_Id.':'.($detail->Vendor_Offer_Id ?? ('vendor-'.($detail->Vendor_Id ?? 'own'))))
                 ->map(fn ($details) => $details->pluck('id')->map(fn ($id) => (int) $id)->values()->all());
             $hasProductIsActive = Schema::hasColumn('Products_Master_T', 'Is_Active');
             $hasCartTable = Schema::hasTable('Customers_Carts_T');
@@ -189,28 +189,33 @@ final class UnpaidAmwalOrderCancellationService
                 && Schema::hasColumn('Customers_Carts_T', 'deleted_at');
             $cartRestoration = $this->emptyCartRestoration();
 
-            foreach ($quantitiesByProduct as $productId => $quantity) {
+            foreach ($quantitiesByProduct as $listingKey => $quantity) {
+                $selectedDetail = $activeDetails->first(fn ($detail) => $detail->Products_Id.':'.($detail->Vendor_Offer_Id ?? ('vendor-'.($detail->Vendor_Id ?? 'own'))) === $listingKey);
+                $productId = (int) $selectedDetail->Products_Id;
+                $offerId = ! empty($selectedDetail->Vendor_Offer_Id) ? (int) $selectedDetail->Vendor_Offer_Id : null;
+                $vendorId = ! empty($selectedDetail->Vendor_Id) ? (int) $selectedDetail->Vendor_Id : null;
+                $stockQuery = \App\Services\VendorOffers::stockRecord($productId, $offerId, $vendorId);
+                $stockRecord = (clone $stockQuery)->first();
+                if (! $stockRecord) { throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException('The seller inventory for this reservation is missing.'); }
                 $product = $products->get((int) $productId);
-                $previousStock = (int) ($product->Product_Stock ?? 0);
+                $previousStock = (int) ($stockRecord->Product_Stock ?? 0);
                 $newStock = $previousStock + $quantity;
-                $currentStatus = (string) ($product->Status ?? 'available');
-                $isDeleted = !empty($product->deleted_at);
-                $isActive = !$hasProductIsActive || (int) ($product->Is_Active ?? 0) === 1;
+                $currentStatus = (string) ($stockRecord->Status ?? 'available');
+                $isDeleted = !empty($product->deleted_at) || !empty($stockRecord->deleted_at);
+                $isActive = (! $hasProductIsActive || (int) ($product->Is_Active ?? 0) === 1) && (! isset($stockRecord->Is_Active) || (bool) $stockRecord->Is_Active);
                 $nextStatus = !$isDeleted && $isActive
                     && strtolower($currentStatus) === 'out_of_stock' && $newStock > 0
                     ? 'available'
                     : $currentStatus;
 
-                DB::table('Products_Master_T')->where('id', $productId)->update([
+                $stockQuery->update([
                     'Product_Stock' => $newStock,
                     'Status' => $nextStatus,
                     'updated_at' => $now,
                 ]);
 
                 if (Schema::hasTable('Product_Stock_Movements_T')) {
-                    $vendorId = $activeDetails
-                        ->first(fn ($detail) => (int) $detail->Products_Id === (int) $productId)
-                        ?->Vendor_Id;
+                    $vendorId = $selectedDetail->Vendor_Id;
 
                     DB::table('Product_Stock_Movements_T')->insert([
                         'Products_Id' => $productId,
@@ -229,7 +234,7 @@ final class UnpaidAmwalOrderCancellationService
                     ]);
                 }
 
-                $orderDetailIds = $detailIdsByProduct->get((int) $productId, []);
+                $orderDetailIds = $detailIdsByProduct->get($listingKey, []);
                 $skipReason = match (true) {
                     !$hasCartTable => 'cart_table_unavailable',
                     $isDeleted => 'product_deleted',
@@ -253,7 +258,8 @@ final class UnpaidAmwalOrderCancellationService
 
                 $cartQuery = DB::table('Customers_Carts_T')
                     ->where('Customers_Id', $order->Customers_Id)
-                    ->where('Products_Id', $productId);
+                    ->where('Products_Id', $productId)
+                        ->when(\App\Services\VendorOffers::ready(), fn ($q) => $q->where('Vendor_Offer_Id', $offerId));
 
                 if ($hasCartSoftDeletes) {
                     $cartQuery->whereNull('deleted_at');
@@ -273,6 +279,7 @@ final class UnpaidAmwalOrderCancellationService
                     $cartInsert = [
                         'Customers_Id' => (int) $order->Customers_Id,
                         'Products_Id' => (int) $productId,
+                            ...(\App\Services\VendorOffers::ready() ? ['Vendor_Offer_Id' => $offerId] : []),
                         'Quantity' => $quantity,
                         'created_at' => $now,
                         'updated_at' => $now,
