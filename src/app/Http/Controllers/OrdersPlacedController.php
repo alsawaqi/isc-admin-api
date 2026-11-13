@@ -477,11 +477,8 @@ class OrdersPlacedController extends Controller
             'note'      => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $order        = OrdersPlaced::findOrFail($id);
-        $orderDetails = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
-        $this->ensurePaymentAllowsFulfillment($order);
-
-        return DB::transaction(function () use ($request, $order, $orderDetails) {
+        return DB::transaction(function () use ($request, $id) {
+            [$order, $orderDetails] = $this->lockFulfillmentStage($id, ['pending', 'processing'], 'packed');
             try {
                 if (! $request->hasFile('signature')) {
                     throw new \RuntimeException('No signature file received.');
@@ -527,10 +524,10 @@ class OrdersPlacedController extends Controller
                     'trace'     => $e->getTraceAsString(),
                 ]);
 
-                return response()->json([
-                    'message' => 'Error confirming packing',
-                    'error'   => $e->getMessage(),
-                ], 500);
+                if (! empty($signature['path'])) {
+                    Storage::disk('uploads')->delete($signature['path']);
+                }
+                throw $e;
             }
         });
     }
@@ -766,15 +763,12 @@ class OrdersPlacedController extends Controller
             'note'      => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $order = OrdersPlaced::findOrFail($id);
-        $this->ensurePaymentAllowsFulfillment($order);
-        $orderplacedetail = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
-
         try{
             
       
 
-        return DB::transaction(function () use ($request, $order, $orderplacedetail) {
+        return DB::transaction(function () use ($request, $id) {
+            [$order, $orderplacedetail] = $this->lockFulfillmentStage($id, ['packed'], 'dispatched');
             // 1) Save any photos to Orders_Packaging_Details_T
             $evidence = [];
 
@@ -841,6 +835,8 @@ class OrdersPlacedController extends Controller
         });
 
 
+                } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+                    throw $e;
                 }catch(\Exception $e){
                     return response()->json(['message' => 'Error confirming dispatch', 'error' => $e->getMessage()], 500);
                 }
@@ -911,18 +907,14 @@ class OrdersPlacedController extends Controller
             'note'      => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $order = OrdersPlaced::findOrFail($id);
-        $this->ensurePaymentAllowsFulfillment($order);
-        $orderDetails = OrdersPlacedDetails::where('Orders_Placed_Id', $order->id)->get();
         try {
-            if (strtolower((string) $order->Delivery_Type) === 'pickup') {
-                return response()->json([
-                    'message' => 'Pickup orders must be completed from the pickup collection page.',
-                ], 422);
-            }
-
-
-            return DB::transaction(function () use ($request, $order, $orderDetails) {
+            return DB::transaction(function () use ($request, $id) {
+                [$order, $orderDetails] = $this->lockFulfillmentStage($id, ['dispatched'], 'shipped');
+                abort_if(
+                    strtolower((string) $order->Delivery_Type) === 'pickup',
+                    422,
+                    'Pickup orders must be completed from the pickup collection page.',
+                );
 
 
 
@@ -971,6 +963,8 @@ class OrdersPlacedController extends Controller
 
                 ]);
             });
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            throw $e;
         } catch (\Exception $e) {
             return response()->json(['message' => 'Error confirming shipment', 'error' => $e->getMessage()], 500);
         }
@@ -1560,6 +1554,29 @@ class OrdersPlacedController extends Controller
             409,
             'This card order is awaiting payment reconciliation and cannot advance in fulfillment.',
         );
+    }
+
+    /** Lock and validate the current stage before storing evidence or changing any line. */
+    private function lockFulfillmentStage($id, array $allowedStatuses, string $nextStatus): array
+    {
+        $order = OrdersPlaced::query()->whereKey($id)->lockForUpdate()->firstOrFail();
+        $this->ensurePaymentAllowsFulfillment($order);
+        abort_unless(
+            in_array(strtolower((string) $order->Status), $allowedStatuses, true),
+            409,
+            "This order cannot be {$nextStatus} from its current status.",
+        );
+
+        $details = OrdersPlacedDetails::query()->where('Orders_Placed_Id', $order->id)
+            ->orderBy('id')->lockForUpdate()->get();
+        abort_if($details->contains(fn ($line) => strtolower((string) $line->Status) === 'on-hold'),
+            409, 'Release held product lines before advancing fulfillment.');
+        $activeDetails = $details->reject(fn ($line) => in_array(
+            strtolower((string) $line->Status), ['cancelled', 'returned'], true,
+        ));
+        abort_if($activeDetails->isEmpty(), 409, 'There are no active product lines to fulfill.');
+
+        return [$order, $activeDetails];
     }
 
     private function ensurePaymentAllowsFulfillment(OrdersPlaced $order): void
