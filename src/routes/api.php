@@ -26,6 +26,7 @@ use App\Http\Controllers\ProductEngagementAdminController;
 use App\Http\Controllers\ProductHierarchyDisplayOrderController;
 use App\Http\Controllers\ProductHierarchyImportController;
 use App\Http\Controllers\ProductImagesController;
+use App\Http\Controllers\ProductImportController;
 use App\Http\Controllers\ProductManufactureController;
 use App\Http\Controllers\ProductMasterController;
 use App\Http\Controllers\ProductsBarcodesController;
@@ -56,6 +57,12 @@ use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\RoutePath;
 
 Route::group(['middleware' => 'auth:sanctum'], function () {
+    Route::prefix('product-import')->middleware('can:product master')->controller(ProductImportController::class)->group(function () {
+        Route::get('/lookups', 'lookups');
+        Route::post('/preview', 'preview')->middleware('throttle:20,1');
+        Route::post('/commit', 'commit')->middleware('throttle:10,1');
+        Route::get('/history', 'history');
+    });
     Route::get('/user', function (Request $request) {
         $user = $request->user();
 

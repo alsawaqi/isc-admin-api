@@ -219,6 +219,65 @@ class ProductHierarchyXlsxParser
     /** @return array{0: string, 1: string} */
     private function findHierarchySheet(ZipArchive $zip, array $sharedStrings): array
     {
+        $sheets = $this->workbookSheets($zip);
+        foreach ($sheets as $sheet) {
+            if ($this->key($sheet['name']) === $this->key('Main Groups & Sub')) {
+                return [$sheet['name'], $sheet['path']];
+            }
+        }
+        foreach ($sheets as $sheet) {
+            if ($this->findHeader($this->readSheetRows($zip, $sheet['path'], $sharedStrings, 30)) !== null) {
+                return [$sheet['name'], $sheet['path']];
+            }
+        }
+        throw new RuntimeException('No worksheet contains the required M-Id, Main Group, Sub Group, and Sub Sub Categories headers.');
+    }
+
+    /** Read one matching table using the same bounded, formula-free XLSX reader. */
+    public function readTable(string $path, array $requiredHeaders): array
+    {
+        if (! class_exists(ZipArchive::class)) {
+            throw new RuntimeException('The PHP zip extension is required to read XLSX files.');
+        }
+        $zip = new ZipArchive;
+        if ($zip->open($path, ZipArchive::RDONLY) !== true) {
+            throw new RuntimeException('The uploaded file is not a valid XLSX workbook.');
+        }
+        try {
+            $this->validateArchive($zip);
+            $strings = $this->readSharedStrings($zip);
+            $matches = [];
+            foreach ($this->workbookSheets($zip) as $sheet) {
+                foreach ($this->readSheetRows($zip, $sheet['path'], $strings, 30) as $row) {
+                    $headers = array_map(fn ($v) => self::tableHeader($v), $row['cells']);
+                    if (array_diff($requiredHeaders, $headers) === []) {
+                        if (count($headers) !== count(array_unique($headers))) {
+                            throw new RuntimeException('The worksheet has duplicate column headings.');
+                        }
+                        $matches[] = ['sheet' => $sheet, 'header_row' => $row['row'], 'columns' => array_flip($headers)];
+                        break;
+                    }
+                }
+            }
+            if (count($matches) !== 1) {
+                throw new RuntimeException('Use one worksheet with the required product headings: Sr No, Main Groups, Sub Group, Sub Sub Group, Brand Name, Product_Name, Product_Description, Barcode, Main Store, Cost, Min Sales Rate and Max Sales Rate.');
+            }
+            $match = $matches[0];
+
+            return ['sheet' => $match['sheet']['name'], 'header_row' => $match['header_row'], 'columns' => $match['columns'],
+                'rows' => $this->readSheetRows($zip, $match['sheet']['path'], $strings)];
+        } finally {
+            $zip->close();
+        }
+    }
+
+    public static function tableHeader(string $value): string
+    {
+        return preg_replace('/[^a-z0-9]/', '', strtolower(trim($value)));
+    }
+
+    private function workbookSheets(ZipArchive $zip): array
+    {
         $workbook = $this->loadXml($this->getEntry($zip, 'xl/workbook.xml'));
         $relationships = $this->loadXml($this->getEntry($zip, 'xl/_rels/workbook.xml.rels'));
         $relationshipXpath = new DOMXPath($relationships);
@@ -256,20 +315,7 @@ class ProductHierarchyXlsxParser
             throw new RuntimeException('The workbook does not contain a readable worksheet.');
         }
 
-        foreach ($sheets as $sheet) {
-            if ($this->key($sheet['name']) === $this->key('Main Groups & Sub')) {
-                return [$sheet['name'], $sheet['path']];
-            }
-        }
-
-        foreach ($sheets as $sheet) {
-            $rows = $this->readSheetRows($zip, $sheet['path'], $sharedStrings, 30);
-            if ($this->findHeader($rows) !== null) {
-                return [$sheet['name'], $sheet['path']];
-            }
-        }
-
-        throw new RuntimeException('No worksheet contains the required M-Id, Main Group, Sub Group, and Sub Sub Categories headers.');
+        return $sheets;
     }
 
     private function resolveWorkbookTarget(string $target): string
