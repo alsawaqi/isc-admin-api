@@ -33,6 +33,8 @@ class ProductSpecificationDescriptionController extends Controller
         return $rows->map(fn($d) => [
             'id' => $d->id,
             'Product_Specification_Description_Name' => $d->Product_Specification_Description_Name,
+            'show_in_filters' => (bool) $d->is_active,
+            'show_in_table' => (bool) $d->show_in_table,
             'values' => $d->values->map(fn($v) => ['id' => $v->id, 'value' => $v->value])->values(),
         ]);
     }
@@ -48,6 +50,8 @@ class ProductSpecificationDescriptionController extends Controller
             'specs.*.input_type'    => ['required', 'in:text,number,select,multiselect,boolean'],
             'specs.*.is_required'   => ['boolean'],
             'specs.*.is_active'     => ['boolean'],
+            'specs.*.show_in_filters' => ['boolean'],
+            'specs.*.show_in_table' => ['boolean'],
             'specs.*.sort_order'    => ['integer'],
 
             // allow string arrays, and require when select/multiselect
@@ -79,7 +83,7 @@ class ProductSpecificationDescriptionController extends Controller
                         'options_json' => $values->isNotEmpty() ? $values->all() : null,
                         'is_required'  => $spec['is_required'] ?? false,
                         'sort_order'   => $spec['sort_order'] ?? ($i + 1),
-                        'is_active'    => $spec['is_active'] ?? false,
+                        ...ProductSpecificationDescription::visibilityAttributes($spec),
                         'Created_By'   => Auth::id(),
                     ]);
 
@@ -127,6 +131,8 @@ class ProductSpecificationDescriptionController extends Controller
                 'input_type' => $d->input_type,
                 'is_required' => (bool) $d->is_required,
                 'is_active'  => (bool) $d->is_active,
+                'show_in_filters' => (bool) $d->is_active,
+                'show_in_table' => (bool) $d->show_in_table,
                 'sort_order' => (int) ($d->sort_order ?? 0),
                 'values'     => $d->values->map(fn($v) => ['id' => $v->id, 'value' => $v->value])->values(),
             ]);
@@ -149,6 +155,8 @@ class ProductSpecificationDescriptionController extends Controller
             'specs.*.input_type'        => ['required', 'in:text,number,select,multiselect,boolean'],
             'specs.*.is_required'       => ['boolean'],
             'specs.*.is_active'         => ['boolean'],
+            'specs.*.show_in_filters' => ['boolean'],
+            'specs.*.show_in_table' => ['boolean'],
             'specs.*.sort_order'        => ['integer'],
             'specs.*.values'            => ['array'],
             'specs.*.values.*.id'       => ['nullable', 'integer'],
@@ -181,7 +189,7 @@ class ProductSpecificationDescriptionController extends Controller
                         'input_type'   => $spec['input_type'],
                         'options_json' => collect($spec['values'] ?? [])->pluck('value')->values(), // keep for UI
                         'is_required'  => $spec['is_required'] ?? false,
-                        'is_active'    => $spec['is_active'] ?? false,
+                        ...ProductSpecificationDescription::visibilityAttributes($spec, $desc),
                         'sort_order'   => $spec['sort_order'] ?? ($i + 1),
                     ]);
                 } else {
@@ -191,7 +199,7 @@ class ProductSpecificationDescriptionController extends Controller
                         'input_type'   => $spec['input_type'],
                         'options_json' => collect($spec['values'] ?? [])->pluck('value')->values(),
                         'is_required'  => $spec['is_required'] ?? false,
-                        'is_active'    => $spec['is_active'] ?? false,
+                        ...ProductSpecificationDescription::visibilityAttributes($spec),
                         'sort_order'   => $spec['sort_order'] ?? ($i + 1),
                     ]);
                 }

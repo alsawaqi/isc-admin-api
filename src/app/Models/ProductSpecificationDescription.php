@@ -15,8 +15,17 @@ class ProductSpecificationDescription extends Model
         'options_json' => 'array',   // <-- this makes Laravel JSON-encode/decode
         'is_required'  => 'boolean',
         'is_active'    => 'boolean',
+        'show_in_table' => 'boolean',
         'sort_order'   => 'integer',
     ];
+
+    public static function visibilityAttributes(array $spec, ?self $current = null): array
+    {
+        // Keep accepting is_active from older clients as the filter setting.
+        $filters = $spec['show_in_filters'] ?? $spec['is_active'] ?? $current?->is_active ?? false;
+        $table = $spec['show_in_table'] ?? $current?->show_in_table ?? $filters;
+        return ['is_active' => (bool) $filters, 'show_in_table' => (bool) $table];
+    }
 
     
 
