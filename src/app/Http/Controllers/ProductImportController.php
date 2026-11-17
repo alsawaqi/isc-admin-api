@@ -53,10 +53,24 @@ class ProductImportController extends Controller
         }
     }
 
+    public function rollback(Request $request, ProductImportService $service)
+    {
+        $data = $request->validate(['job_id' => ['required', 'integer', 'min:1'], 'confirm' => ['required', 'accepted']]);
+        try {
+            return response()->json(['data' => $service->rollback((int) $data['job_id'], $request->user())]);
+        } catch (RuntimeException $e) {
+            if (! in_array($e->getCode(), [403, 404, 409], true)) {
+                throw $e;
+            }
+
+            return response()->json(['message' => $e->getMessage()], $e->getCode());
+        }
+    }
+
     public function history(Request $request)
     {
-        return response()->json(['data' => DB::table('Product_Import_Jobs_T')->where('User_Id', $request->user()->id)->where('Status', 'committed')
-            ->orderByDesc('id')->limit(20)->get(['id', 'File_Name', 'Committed_At', 'Result'])->map(function ($job) {
+        return response()->json(['data' => DB::table('Product_Import_Jobs_T')->where('User_Id', $request->user()->id)->whereIn('Status', ['committed', 'rolled_back'])
+            ->orderByDesc('id')->limit(50)->get(['id', 'File_Name', 'Status', 'Committed_At', 'Result'])->map(function ($job) {
                 $job->Result = json_decode($job->Result, true);
 
                 return $job;

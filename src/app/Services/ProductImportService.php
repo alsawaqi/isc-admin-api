@@ -13,7 +13,7 @@ use RuntimeException;
 
 class ProductImportService
 {
-    public function __construct(private ProductImportAnalysis $analysis) {}
+    public function __construct(private ProductImportAnalysis $analysis, private ProductImportUndo $undo) {}
 
     public function preview(array $workbook, array $options, object $actor, string $name, string $hash): array
     {
@@ -48,6 +48,9 @@ class ProductImportService
             }
             if ($job->Status === 'committed') {
                 return [...json_decode($job->Result, true, 512, JSON_THROW_ON_ERROR), 'idempotent' => true];
+            }
+            if ($job->Status === 'rolled_back') {
+                throw new RuntimeException('This import was undone. Upload and preview the workbook again to reimport it.', 409);
             }
             if (now()->greaterThan($job->Expires_At)) {
                 throw new RuntimeException('This preview expired. Preview the workbook again.', 409);
@@ -99,10 +102,44 @@ class ProductImportService
                 ]);
                 $ids[] = $product->id;
             }
-            $result = ['job_id' => $job->id, 'created' => count($ids), 'product_ids' => $ids, 'brands_created' => count($newBrands), 'active' => false, 'idempotent' => false];
-            DB::table('Product_Import_Jobs_T')->where('id', $job->id)->update(['Status' => 'committed', 'Result' => json_encode($result, JSON_THROW_ON_ERROR), 'Committed_At' => now(), 'updated_at' => now()]);
+            $payload['undo'] = $this->undo->capture($ids, array_values($newBrands));
+            $result = ['job_id' => $job->id, 'created' => count($ids), 'product_ids' => $ids, 'brands_created' => count($newBrands), 'active' => false, 'idempotent' => false, 'undo_available' => true];
+            DB::table('Product_Import_Jobs_T')->where('id', $job->id)->update(['Status' => 'committed', 'Payload' => json_encode($payload, JSON_THROW_ON_ERROR), 'Result' => json_encode($result, JSON_THROW_ON_ERROR), 'Committed_At' => now(), 'updated_at' => now()]);
 
             return $result;
+        });
+    }
+
+    public function rollback(int $jobId, object $actor): array
+    {
+        return DB::transaction(function () use ($jobId, $actor) {
+            if (DB::connection()->getDriverName() === 'sqlsrv') {
+                $lock = DB::selectOne("DECLARE @r int; EXEC @r = sp_getapplock @Resource=N'product-workbook-import', @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=10000; SELECT @r AS result;");
+                if ((int) $lock->result < 0) {
+                    throw new RuntimeException('Another import operation is running. Try again shortly.', 409);
+                }
+            }
+            $job = DB::table('Product_Import_Jobs_T')->where('id', $jobId)->lockForUpdate()->first();
+            if (! $job) {
+                throw new RuntimeException('Import not found.', 404);
+            }
+            if ((int) $job->User_Id !== (int) $actor->id) {
+                throw new RuntimeException('You can only undo your own imports.', 403);
+            }
+            $result = json_decode($job->Result ?? '{}', true, 512, JSON_THROW_ON_ERROR);
+            if ($job->Status === 'rolled_back') {
+                return [...$result['rollback'], 'idempotent' => true];
+            }
+            $payload = json_decode($job->Payload, true, 512, JSON_THROW_ON_ERROR);
+            if ($job->Status !== 'committed' || empty($payload['undo']['products'])) {
+                throw new RuntimeException('Undo is unavailable for this import. Only imports created with rollback support can be undone.', 409);
+            }
+            $rollback = [...$this->undo->remove($payload['undo'], $actor), 'job_id' => $job->id, 'rolled_back_at' => now()->toIso8601String(), 'rolled_back_by' => $actor->id, 'idempotent' => false];
+            $result['rollback'] = $rollback;
+            $result['undo_available'] = false;
+            DB::table('Product_Import_Jobs_T')->where('id', $jobId)->update(['Status' => 'rolled_back', 'Result' => json_encode($result, JSON_THROW_ON_ERROR), 'updated_at' => now()]);
+
+            return $rollback;
         });
     }
 }

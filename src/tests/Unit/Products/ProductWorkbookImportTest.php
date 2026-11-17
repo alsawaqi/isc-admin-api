@@ -281,6 +281,129 @@ class ProductWorkbookImportTest extends TestCase
         }
     }
 
+    public function test_undo_removes_only_its_batch_and_allows_reimport_with_a_fresh_preview(): void
+    {
+        $service = app(ProductImportService::class);
+        $first = $service->commit($this->preview($this->workbook(['srno' => 'KEEP', 'barcode' => 'KEEP']))['preview_token'], $this->actor);
+        $book = $this->workbook(['brandname' => 'New Brand'], 2);
+        $preview = $this->preview($book);
+        $options = [...$this->options, 'brand_map' => [$preview['brands'][0]['key'] => 'new']];
+        $preview = $this->preview($book, $options);
+        $batch = $service->commit($preview['preview_token'], $this->actor);
+        $result = $service->rollback($batch['job_id'], $this->actor);
+        $this->assertSame(2, $result['products_removed']);
+        $this->assertSame(1, $result['brands_removed']);
+        $this->assertTrue($service->rollback($batch['job_id'], $this->actor)['idempotent']);
+        $this->assertEquals($first['product_ids'], DB::table('Products_Master_T')->pluck('id')->all());
+        $this->assertSame(1, DB::table('Product_Supplier_BarCode_T')->count());
+        $this->assertSame(1, DB::table('Product_Stock_Movements_T')->count());
+        $this->assertSame('rolled_back', DB::table('Product_Import_Jobs_T')->where('id', $batch['job_id'])->value('Status'));
+        try {
+            $service->commit($preview['preview_token'], $this->actor);
+            $this->fail('An undone import must not be replayed');
+        } catch (RuntimeException $e) {
+            $this->assertSame(409, $e->getCode());
+        }
+        $this->assertTrue($this->preview($book, $options)['can_commit']);
+    }
+
+    public function test_undo_blocks_changed_active_or_removed_products_without_partial_deletion(): void
+    {
+        $service = app(ProductImportService::class);
+        $batch = $service->commit($this->preview($this->workbook([], 2))['preview_token'], $this->actor);
+        $id = $batch['product_ids'][1];
+        $original = (array) DB::table('Products_Master_T')->where('id', $id)->first();
+        foreach ([['Product_Name' => 'Edited'], ['Is_Active' => true], ['Product_Stock' => 9], ['deleted_at' => now()]] as $change) {
+            DB::table('Products_Master_T')->where('id', $id)->update($change);
+            try {
+                $service->rollback($batch['job_id'], $this->actor);
+                $this->fail('Expected change protection');
+            } catch (RuntimeException $e) {
+                $this->assertSame(409, $e->getCode());
+            }
+            $this->assertSame(2, DB::table('Products_Master_T')->count());
+            $this->assertSame(2, DB::table('Product_Supplier_BarCode_T')->count());
+            DB::table('Products_Master_T')->where('id', $id)->update($original);
+        }
+    }
+
+    public function test_undo_blocks_order_and_unconstrained_related_records_and_added_stock_movements(): void
+    {
+        $service = app(ProductImportService::class);
+        $batch = $service->commit($this->preview($this->workbook([], 2))['preview_token'], $this->actor);
+        Schema::create('OrderLinks', function (Blueprint $t) {
+            $t->id();
+            $t->foreignId('custom_product_ref')->constrained('Products_Master_T');
+        });
+        Schema::create('ImageLinks', function (Blueprint $t) {
+            $t->id();
+            $t->unsignedBigInteger('Product_Id');
+        });
+        foreach ([['OrderLinks', 'custom_product_ref'], ['ImageLinks', 'Product_Id']] as [$table, $column]) {
+            DB::table($table)->insert([$column => $batch['product_ids'][1]]);
+            try {
+                $service->rollback($batch['job_id'], $this->actor);
+                $this->fail('Expected relationship protection');
+            } catch (RuntimeException $e) {
+                $this->assertSame(409, $e->getCode());
+            }
+            $this->assertSame(2, DB::table('Products_Master_T')->count());
+            DB::table($table)->delete();
+        }
+        DB::table('Product_Stock_Movements_T')->where('Products_Id', $batch['product_ids'][0])->update(['Notes' => 'Edited ledger']);
+        $this->expectExceptionCode(409);
+        $service->rollback($batch['job_id'], $this->actor);
+    }
+
+    public function test_undo_retains_a_new_brand_used_by_another_product(): void
+    {
+        $service = app(ProductImportService::class);
+        $book = $this->workbook(['brandname' => 'New Brand']);
+        $preview = $this->preview($book);
+        $options = [...$this->options, 'brand_map' => [$preview['brands'][0]['key'] => 'new']];
+        $batch = $service->commit($this->preview($book, $options)['preview_token'], $this->actor);
+        $service->commit($this->preview($this->workbook(['brandname' => 'New Brand', 'srno' => 'SECOND', 'barcode' => 'SECOND']))['preview_token'], $this->actor);
+        $result = $service->rollback($batch['job_id'], $this->actor);
+        $this->assertSame(0, $result['brands_removed']);
+        $this->assertSame(1, $result['brands_retained']);
+        $this->assertSame(2, DB::table('Products_Brands_Master_T')->count());
+        $this->assertSame(1, DB::table('Products_Master_T')->count());
+    }
+
+    public function test_undo_rejects_another_user_and_legacy_imports_without_a_snapshot(): void
+    {
+        $service = app(ProductImportService::class);
+        $batch = $service->commit($this->preview($this->workbook())['preview_token'], $this->actor);
+        $other = clone $this->actor;
+        $other->id = 99;
+        try {
+            $service->rollback($batch['job_id'], $other);
+            $this->fail();
+        } catch (RuntimeException $e) {
+            $this->assertSame(403, $e->getCode());
+        }
+        DB::table('Product_Import_Jobs_T')->where('id', $batch['job_id'])->update(['Payload' => '{}']);
+        $this->expectExceptionCode(409);
+        $service->rollback($batch['job_id'], $this->actor);
+    }
+
+    public function test_database_failure_during_undo_restores_every_product_and_child_record(): void
+    {
+        $service = app(ProductImportService::class);
+        $batch = $service->commit($this->preview($this->workbook([], 2))['preview_token'], $this->actor);
+        DB::unprepared('CREATE TRIGGER fail_undo BEFORE DELETE ON Products_Master_T WHEN old.id = '.(int) $batch['product_ids'][1]." BEGIN SELECT RAISE(ABORT, 'Simulated delete failure'); END");
+        try {
+            $service->rollback($batch['job_id'], $this->actor);
+            $this->fail();
+        } catch (\Illuminate\Database\QueryException $e) {
+            $this->assertStringContainsString('Simulated delete failure', $e->getMessage());
+        }
+        foreach (['Products_Master_T', 'Product_Supplier_BarCode_T', 'Product_Stock_Movements_T'] as $table) {
+            $this->assertSame(2, DB::table($table)->count());
+        }
+        $this->assertSame('committed', DB::table('Product_Import_Jobs_T')->value('Status'));
+    }
+
     public function test_http_routes_require_authentication_and_product_master_permission(): void
     {
         $this->getJson('/api/product-import/lookups')->assertUnauthorized();
@@ -290,6 +413,7 @@ class ProductWorkbookImportTest extends TestCase
         Gate::define('product master', fn () => false);
         $this->actingAs($user, 'sanctum')->getJson('/api/product-import/lookups')->assertForbidden();
         $this->postJson('/api/product-import/commit', ['preview_token' => '123'])->assertForbidden();
+        $this->postJson('/api/product-import/rollback', ['job_id' => 1, 'confirm' => true])->assertForbidden();
     }
 
     public function test_http_preview_commit_and_history_use_server_owned_payloads(): void
@@ -313,9 +437,13 @@ class ProductWorkbookImportTest extends TestCase
             $response = $this->post('/api/product-import/preview', ['file' => new UploadedFile($file, 'motors.xlsx', null, null, true), 'options' => json_encode($this->options)], ['Accept' => 'application/json']);
             $response->assertOk()->assertJsonPath('data.can_commit', true);
             $token = $response->json('data.preview_token');
-            $this->postJson('/api/product-import/commit', ['preview_token' => $token, 'rows' => [['price' => 0]]])->assertOk()->assertJsonPath('data.created',1);
-            $this->assertEquals(70,DB::table('Products_Master_T')->value('Product_Price'));
-            $this->getJson('/api/product-import/history')->assertOk()->assertJsonCount(1,'data');
+            $this->postJson('/api/product-import/commit', ['preview_token' => $token, 'rows' => [['price' => 0]]])->assertOk()->assertJsonPath('data.created', 1);
+            $this->assertEquals(70, DB::table('Products_Master_T')->value('Product_Price'));
+            $this->getJson('/api/product-import/history')->assertOk()->assertJsonCount(1, 'data');
+            $id = DB::table('Product_Import_Jobs_T')->value('id');
+            $this->postJson('/api/product-import/rollback', ['job_id' => $id])->assertUnprocessable();
+            $this->postJson('/api/product-import/rollback', ['job_id' => $id, 'confirm' => true])->assertOk()->assertJsonPath('data.products_removed', 1);
+            $this->getJson('/api/product-import/history')->assertOk()->assertJsonPath('data.0.Status', 'rolled_back');
         } finally {
             unlink($file);
         }

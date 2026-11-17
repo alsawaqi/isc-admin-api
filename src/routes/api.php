@@ -61,6 +61,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         Route::get('/lookups', 'lookups');
         Route::post('/preview', 'preview')->middleware('throttle:20,1');
         Route::post('/commit', 'commit')->middleware('throttle:10,1');
+        Route::post('/rollback', 'rollback')->middleware('throttle:10,1');
         Route::get('/history', 'history');
     });
     Route::get('/user', function (Request $request) {
