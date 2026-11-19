@@ -8,9 +8,16 @@ class ProductImportWorkbook
 {
     public const HEADERS = ['srno', 'maingroups', 'subgroup', 'subsubgroup', 'brandname', 'productname', 'productdescription', 'barcode', 'mainstore', 'cost', 'minsalesrate', 'maxsalesrate'];
 
+    public const TEMPLATE_HEADERS = ['sku', 'category', 'subcategory', 'subsubcategory', 'brand', 'productname', 'description', 'inhousebarcode', 'stockquantity', 'costomr', 'minimumsellingpriceomr', 'websitesellingpriceomr'];
+
     public function parse(string $path): array
     {
-        $table = app(ProductHierarchyXlsxParser::class)->readTable($path, self::HEADERS);
+        $table = app(ProductHierarchyXlsxParser::class)->readTable($path, self::HEADERS, self::TEMPLATE_HEADERS);
+        $inhouse = array_diff(self::TEMPLATE_HEADERS, array_keys($table['columns'])) === [];
+        if (! $inhouse && isset($table['columns']['inhousebarcode'])) {
+            throw new RuntimeException('Use the product upload template to import an in-house barcode.');
+        }
+        $headers = $inhouse ? self::TEMPLATE_HEADERS : self::HEADERS;
         $rows = [];
         foreach ($table['rows'] as $raw) {
             if ($raw['row'] <= $table['header_row']) {
@@ -18,8 +25,8 @@ class ProductImportWorkbook
             }
             $values = [];
             $formulas = [];
-            foreach (self::HEADERS as $header) {
-                $column = $table['columns'][$header];
+            foreach (self::HEADERS as $index => $header) {
+                $column = $table['columns'][$headers[$index]];
                 $values[$header] = trim($raw['cells'][$column] ?? '');
                 if (isset($raw['formulas'][$column])) {
                     $formulas[] = $header;
@@ -37,7 +44,7 @@ class ProductImportWorkbook
             throw new RuntimeException('The workbook contains no product rows.');
         }
 
-        return ['sheet' => $table['sheet'], 'rows' => $rows];
+        return ['sheet' => $table['sheet'], 'rows' => $rows, 'inhouse_barcodes' => $inhouse];
     }
 
     public static function key(string $value): string

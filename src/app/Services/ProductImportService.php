@@ -90,11 +90,15 @@ class ProductImportService
                     'Product_Stock' => $row['stock'], 'Status' => $row['stock'] > 0 ? 'available' : 'out_of_stock',
                     'Is_Active' => false, 'Vendor_Id' => null, 'Created_By' => $actor->id, 'Created_Date' => now(),
                 ]);
-                $product->update(['Inhouse_Barcode_Source' => $product->id.'-'.random_int(10000, 99999)]);
-                ProductsBarcodes::create([
-                    'Product_Barcode_Code' => CodeGenerator::createCode('PRBAR', 'Product_Supplier_BarCode_T', 'Product_Barcode_Code'),
-                    'Products_Id' => $product->id, 'Supplier_Barcode' => $row['barcode'], 'Created_By' => $actor->id, 'Created_Date' => now(),
-                ]);
+                if ($payload['workbook']['inhouse_barcodes'] ?? false) {
+                    $product->update(['Inhouse_Barcode_Source' => $row['barcode']]);
+                } else {
+                    $product->update(['Inhouse_Barcode_Source' => $product->id.'-'.random_int(10000, 99999)]);
+                    ProductsBarcodes::create([
+                        'Product_Barcode_Code' => CodeGenerator::createCode('PRBAR', 'Product_Supplier_BarCode_T', 'Product_Barcode_Code'),
+                        'Products_Id' => $product->id, 'Supplier_Barcode' => $row['barcode'], 'Created_By' => $actor->id, 'Created_Date' => now(),
+                    ]);
+                }
                 ProductStockMovement::create([
                     'Products_Id' => $product->id, 'Vendor_Id' => null, 'Movement_Type' => 'import_initial', 'Quantity_Delta' => $row['stock'],
                     'Quantity' => $row['stock'], 'Previous_Stock' => 0, 'New_Stock' => $row['stock'], 'Actor_Type' => 'admin', 'Actor_Id' => $actor->id,

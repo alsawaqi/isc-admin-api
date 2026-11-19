@@ -25,7 +25,12 @@ class ProductImportAnalysis
             ->get(['l.id', 's.id as sub_id', 'd.id as department_id', 'd.Product_Department_Name as main', 's.Sub_Department_Name as sub', 'l.Product_Sub_Sub_Department_Name as leaf'])
             ->keyBy('id');
         $paths = $categories->groupBy(fn ($c) => ProductImportWorkbook::categoryKey(['maingroups' => $c->main, 'subgroup' => $c->sub, 'subsubgroup' => $c->leaf]));
-        $barcodes = $this->existingKeys('Product_Supplier_BarCode_T', 'Supplier_Barcode', array_column(array_column($workbook['rows'], 'values'), 'barcode'));
+        $inhouse = $workbook['inhouse_barcodes'] ?? false;
+        $codes = array_column(array_column($workbook['rows'], 'values'), 'barcode');
+        $barcodes = $this->existingKeys('Product_Supplier_BarCode_T', 'Supplier_Barcode', $codes);
+        if ($inhouse) {
+            $barcodes += $this->existingKeys('Products_Master_T', 'Inhouse_Barcode_Source', $codes);
+        }
         $skus = $this->existingKeys('Products_Master_T', 'Product_Sku', array_column(array_column($workbook['rows'], 'values'), 'srno'));
         $issues = [];
         $typeId = (int) ($options['product_type_id'] ?? 0);
@@ -47,6 +52,9 @@ class ProductImportAnalysis
                 if (mb_strlen($v[$field]) > ($field === 'productdescription' ? 10000 : 255)) {
                     $add('error', $field, "{$field} is too long.");
                 }
+            }
+            if ($inhouse && strlen(mb_convert_encoding($v['barcode'], 'UTF-16LE', 'UTF-8')) > 100) {
+                $add('error', 'barcode', 'The in-house barcode exceeds the 50-character database limit.');
             }
             foreach ($raw['formulas'] as $field) {
                 $add('error', $field, 'Replace this formula with a fixed value before importing.');
@@ -157,7 +165,7 @@ class ProductImportAnalysis
     private function existingKeys(string $table, string $column, array $values): array
     {
         $keys = [];
-        foreach (array_chunk(array_unique(array_filter(array_map(ProductImportWorkbook::key(...), $values))), 500) as $chunk) {
+        foreach (array_chunk(array_unique(array_filter(array_map(ProductImportWorkbook::key(...), $values), fn ($value) => $value !== '')), 500) as $chunk) {
             foreach (DB::table($table)->whereIn(DB::raw("LOWER(LTRIM(RTRIM([$column])))"), $chunk)->pluck($column) as $value) {
                 $keys[ProductImportWorkbook::key($value)] = true;
             }

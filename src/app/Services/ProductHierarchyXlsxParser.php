@@ -234,7 +234,7 @@ class ProductHierarchyXlsxParser
     }
 
     /** Read one matching table using the same bounded, formula-free XLSX reader. */
-    public function readTable(string $path, array $requiredHeaders): array
+    public function readTable(string $path, array $requiredHeaders, array $alternativeHeaders = []): array
     {
         if (! class_exists(ZipArchive::class)) {
             throw new RuntimeException('The PHP zip extension is required to read XLSX files.');
@@ -250,7 +250,12 @@ class ProductHierarchyXlsxParser
             foreach ($this->workbookSheets($zip) as $sheet) {
                 foreach ($this->readSheetRows($zip, $sheet['path'], $strings, 30) as $row) {
                     $headers = array_map(fn ($v) => self::tableHeader($v), $row['cells']);
-                    if (array_diff($requiredHeaders, $headers) === []) {
+                    $legacy = array_diff($requiredHeaders, $headers) === [];
+                    $alternative = $alternativeHeaders && array_diff($alternativeHeaders, $headers) === [];
+                    if ($legacy && $alternative) {
+                        throw new RuntimeException('Use a single product template format in each workbook.');
+                    }
+                    if ($legacy || $alternative) {
                         if (count($headers) !== count(array_unique($headers))) {
                             throw new RuntimeException('The worksheet has duplicate column headings.');
                         }
@@ -260,7 +265,7 @@ class ProductHierarchyXlsxParser
                 }
             }
             if (count($matches) !== 1) {
-                throw new RuntimeException('Use one worksheet with the required product headings: Sr No, Main Groups, Sub Group, Sub Sub Group, Brand Name, Product_Name, Product_Description, Barcode, Main Store, Cost, Min Sales Rate and Max Sales Rate.');
+                throw new RuntimeException('Use the product upload template, or use one worksheet with the legacy headings: Sr No, Main Groups, Sub Group, Sub Sub Group, Brand Name, Product_Name, Product_Description, Barcode, Main Store, Cost, Min Sales Rate and Max Sales Rate.');
             }
             $match = $matches[0];
 

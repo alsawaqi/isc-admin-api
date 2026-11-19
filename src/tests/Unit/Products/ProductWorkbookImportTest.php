@@ -281,6 +281,37 @@ class ProductWorkbookImportTest extends TestCase
         }
     }
 
+    public function test_template_commits_exact_inhouse_code_and_supports_undo(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'product-template');
+        $headers = $cells = [];
+        $values = $this->workbook(['barcode' => '00017', 'mainstore' => '', 'cost' => ''])['rows'][0]['values'];
+        foreach (ProductImportWorkbook::TEMPLATE_HEADERS as $index => $heading) {
+            $column = chr(65 + $index);
+            $headers[$column.'1'] = $heading;
+            $cells[$column.'2'] = $values[ProductImportWorkbook::HEADERS[$index]];
+        }
+        try {
+            MinimalXlsxFactory::write($file, [1 => $headers, 2 => $cells]);
+            $book = app(ProductImportWorkbook::class)->parse($file);
+            $options = [...$this->options, 'blank_stock' => 'zero'];
+            $preview = $this->preview($book, $options);
+            $this->assertTrue($preview['can_commit']);
+            $service = app(ProductImportService::class);
+            $result = $service->commit($preview['preview_token'], $this->actor);
+            $product = DB::table('Products_Master_T')->sole();
+            $this->assertSame('00017', $product->Inhouse_Barcode_Source);
+            $this->assertNull($product->Product_Cost);
+            $this->assertEquals(0, $product->Product_Stock);
+            $this->assertSame(0, DB::table('Product_Supplier_BarCode_T')->count());
+            $book['rows'][0]['values']['srno'] = 'another-sku';
+            $this->assertFalse($this->preview($book, $options)['can_commit']);
+            $this->assertEquals(1, $service->rollback($result['job_id'], $this->actor)['products_removed']);
+        } finally {
+            unlink($file);
+        }
+    }
+
     public function test_undo_removes_only_its_batch_and_allows_reimport_with_a_fresh_preview(): void
     {
         $service = app(ProductImportService::class);
