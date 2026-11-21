@@ -23,6 +23,7 @@ class ProductImportController extends Controller
         }
         $data = $request->validate([
             'file' => ['required', 'file', 'max:5120'], 'options' => ['required', 'array'],
+            'options.match_inhouse' => ['sometimes', 'boolean'],
             'options.price_column' => ['required', 'in:min,max'], 'options.blank_stock' => ['required', 'in:reject,zero'],
             'options.product_type_id' => ['nullable', 'integer', 'min:1'], 'options.category_map' => ['sometimes', 'array', 'max:2000'],
             'options.category_map.*' => ['nullable', 'integer', 'min:1'], 'options.brand_map' => ['sometimes', 'array', 'max:2000'],

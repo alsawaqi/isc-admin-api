@@ -20,11 +20,19 @@ class ProductImportUndo
         return $snapshot;
     }
 
+    public function updateVersion(int $id, bool $lock = false): string
+    {
+        $product = $this->rows('Products_Master_T', 'id', [$id], $lock);
+        $movements = $this->rows('Product_Stock_Movements_T', 'Products_Id', [$id], $lock);
+
+        return hash('sha256', json_encode([$product, $movements], JSON_THROW_ON_ERROR));
+    }
+
     // Called inside the same transaction and application lock as commit.
     public function remove(array $snapshot, object $actor): array
     {
         $ids = array_column($snapshot['products'], 'id');
-        if (! $ids || $this->rows('Products_Master_T', 'id', $ids, true) !== $snapshot['products']) {
+        if ($this->rows('Products_Master_T', 'id', $ids, true) !== $snapshot['products']) {
             throw new RuntimeException('Undo blocked: an imported product was changed or removed. No products were removed.', 409);
         }
         foreach ($snapshot['products'] as $product) {
@@ -55,6 +63,16 @@ class ProductImportUndo
             DB::table('Products_Master_T')->whereIn('id', $chunk)->delete();
         }
 
+        foreach ($snapshot['updates'] ?? [] as $update) {
+            if ($this->updateVersion($update['id'], true) !== $update['version']) {
+                throw new RuntimeException('Undo blocked: an updated product or its stock records changed after this import.', 409);
+            }
+            DB::table('Products_Master_T')->where('id', $update['id'])->update($update['before']);
+            if ($update['movement_id'] !== null) {
+                DB::table('Product_Stock_Movements_T')->where('Products_Id', $update['id'])->where('id', $update['movement_id'])->delete();
+            }
+        }
+
         $removedBrands = 0;
         if ($actor->can('product brands') && $snapshot['brands']) {
             $brandReferences = $this->references('Products_Brands_Master_T', ['Product_Brand_Id', 'Brand_Id', 'Products_Brands_Id', 'Product_Brands_Id']);
@@ -75,7 +93,7 @@ class ProductImportUndo
             }
         }
 
-        return ['products_removed' => count($ids), 'brands_removed' => $removedBrands, 'brands_retained' => count($snapshot['brands']) - $removedBrands];
+        return ['updates_reversed' => count($snapshot['updates'] ?? []), 'products_removed' => count($ids), 'brands_removed' => $removedBrands, 'brands_retained' => count($snapshot['brands']) - $removedBrands];
     }
 
     private function rows(string $table, string $column, array $ids, bool $lock = false): array

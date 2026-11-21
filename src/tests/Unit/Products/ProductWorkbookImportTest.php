@@ -312,6 +312,57 @@ class ProductWorkbookImportTest extends TestCase
         }
     }
 
+    public function test_mixed_add_update_and_restore_preview_commit_replay_and_undo(): void
+    {
+        $service = app(ProductImportService::class);
+        $options = [...$this->options, 'match_inhouse' => true];
+        $book = [...$this->workbook([], 2), 'inhouse_barcodes' => true];
+        $initial = $service->commit($this->preview($book, $options)['preview_token'], $this->actor);
+        [$active, $archived] = $initial['product_ids'];
+        DB::table('Products_Master_T')->where('id', $active)->update(['Is_Active' => 1]);
+        DB::table('Products_Master_T')->where('id', $archived)->update(['Is_Active' => 1, 'deleted_at' => '2026-11-01']);
+        $before = DB::table('Products_Master_T')->orderBy('id')->get()->toJson();
+        $book = [...$this->workbook(['maxsalesrate' => '80', 'mainstore' => '9', 'cost' => ''], 3), 'inhouse_barcodes' => true];
+        $preview = $this->preview($book, $options);
+        $this->assertTrue($preview['can_commit']);
+        $this->assertSame(['update', 'restore', 'add'], array_column($preview['rows'], 'action'));
+        $this->assertSame($before, DB::table('Products_Master_T')->orderBy('id')->get()->toJson());
+        $result = $service->commit($preview['preview_token'], $this->actor);
+        $this->assertSame([1, 1, 1], [$result['created'], $result['updated'], $result['restored']]);
+        $this->assertTrue($service->commit($preview['preview_token'], $this->actor)['idempotent']);
+        $item = DB::table('Products_Master_T')->where('id', $archived)->first();
+        $this->assertNull($item->deleted_at);
+        $this->assertFalse((bool) $item->Is_Active);
+        $this->assertTrue((bool) DB::table('Products_Master_T')->where('id', $active)->value('Is_Active'));
+        $this->assertEquals(80, $item->Product_Price);
+        $this->assertNull($item->Product_Cost);
+        $this->assertEquals(9, $item->Product_Stock);
+        $this->assertEquals(6, DB::table('Product_Stock_Movements_T')->where('Products_Id', $archived)->where('Movement_Type', 'set')->value('Quantity_Delta'));
+        $this->assertSame(2, $service->rollback($result['job_id'], $this->actor)['updates_reversed']);
+        $this->assertSame($before, DB::table('Products_Master_T')->orderBy('id')->get()->toJson());
+        $this->assertEquals(2, DB::table('Product_Stock_Movements_T')->count());
+    }
+
+    public function test_changed_update_target_requires_new_preview_and_later_stock_edits_block_undo(): void
+    {
+        $service = app(ProductImportService::class);
+        $options = [...$this->options, 'match_inhouse' => true];
+        $book = [...$this->workbook(), 'inhouse_barcodes' => true];
+        $service->commit($this->preview($book, $options)['preview_token'], $this->actor);
+        $preview = $this->preview($book, $options);
+        DB::table('Products_Master_T')->update(['Product_Stock' => 20]);
+        try {
+            $service->commit($preview['preview_token'], $this->actor);
+            $this->fail('Stale stock preview must fail');
+        } catch (RuntimeException $e) {
+            $this->assertSame(409, $e->getCode());
+        }
+        $result = $service->commit($this->preview($book, $options)['preview_token'], $this->actor);
+        DB::table('Products_Master_T')->update(['Product_Stock' => 18]);
+        $this->expectExceptionCode(409);
+        $service->rollback($result['job_id'], $this->actor);
+    }
+
     public function test_undo_removes_only_its_batch_and_allows_reimport_with_a_fresh_preview(): void
     {
         $service = app(ProductImportService::class);

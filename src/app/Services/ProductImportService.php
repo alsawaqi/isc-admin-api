@@ -56,7 +56,7 @@ class ProductImportService
                 throw new RuntimeException('This preview expired. Preview the workbook again.', 409);
             }
             $payload = json_decode($job->Payload, true, 512, JSON_THROW_ON_ERROR);
-            $analysis = $this->analysis->analyze($payload['workbook'], $payload['options']);
+            $analysis = $this->analysis->analyze($payload['workbook'], $payload['options'], true);
             if (! $analysis['can_commit']) {
                 throw new RuntimeException('The workbook has errors or the catalogue changed. Preview it again before importing.', 422);
             }
@@ -67,8 +67,13 @@ class ProductImportService
                 throw new RuntimeException('Creating brands requires the product brands permission.', 403);
             }
             $ids = [];
+            $updates = [];
             $newBrands = [];
             foreach ($analysis['rows'] as $row) {
+                if ($row['action'] !== 'add') {
+                    $updates[] = $this->updateProduct($row, $actor, $job->id);
+                    continue;
+                }
                 $brandId = $row['brand_id'];
                 if ($row['new_brand']) {
                     $brandKey = ProductImportWorkbook::key($row['new_brand']);
@@ -107,11 +112,42 @@ class ProductImportService
                 $ids[] = $product->id;
             }
             $payload['undo'] = $this->undo->capture($ids, array_values($newBrands));
-            $result = ['job_id' => $job->id, 'created' => count($ids), 'product_ids' => $ids, 'brands_created' => count($newBrands), 'active' => false, 'idempotent' => false, 'undo_available' => true];
+            $payload['undo']['updates'] = $updates;
+            $result = ['updated' => $analysis['summary']['update'], 'restored' => $analysis['summary']['restore'], 'job_id' => $job->id, 'created' => count($ids), 'product_ids' => $ids, 'brands_created' => count($newBrands), 'active' => false, 'idempotent' => false, 'undo_available' => true];
             DB::table('Product_Import_Jobs_T')->where('id', $job->id)->update(['Status' => 'committed', 'Payload' => json_encode($payload, JSON_THROW_ON_ERROR), 'Result' => json_encode($result, JSON_THROW_ON_ERROR), 'Committed_At' => now(), 'updated_at' => now()]);
 
             return $result;
         });
+    }
+
+    private function updateProduct(array $row, object $actor, int $jobId): array
+    {
+        $query = DB::table('Products_Master_T')->where('id', $row['target_id']);
+        $fields = ['Product_Price', 'Minimum_Selling_Price', 'Product_Cost', 'Product_Stock', 'Status', 'updated_at'];
+        $changes = ['Product_Price' => $row['price'], 'Minimum_Selling_Price' => $row['minimum'],
+            'Product_Cost' => $row['cost'], 'Product_Stock' => $row['stock'], 'updated_at' => now()];
+        if ($row['action'] === 'restore') {
+            $fields[] = 'Is_Active';
+            $fields[] = 'deleted_at';
+            $changes['Is_Active'] = false;
+            $changes['deleted_at'] = null;
+        }
+        $before = (array) $query->first($fields);
+        $changes['Status'] = $before['Status'] === 'discontinued' ? 'discontinued' : ($row['stock'] > 0 ? 'available' : 'out_of_stock');
+        $query->update($changes);
+        $delta = $row['stock'] - (int) $before['Product_Stock'];
+        $movementId = null;
+        if ($delta !== 0) {
+            $movementId = ProductStockMovement::create([
+                'Products_Id' => $row['target_id'], 'Vendor_Id' => null, 'Movement_Type' => 'set',
+                'Quantity_Delta' => $delta, 'Quantity' => abs($delta), 'Previous_Stock' => $before['Product_Stock'],
+                'New_Stock' => $row['stock'], 'Actor_Type' => 'admin', 'Actor_Id' => $actor->id,
+                'Actor_Name' => $actor->User_Name ?? null, 'Notes' => "Workbook import {$jobId}, Excel row {$row['row']}.",
+            ])->id;
+        }
+
+        return ['id' => $row['target_id'], 'before' => $before, 'movement_id' => $movementId,
+            'version' => $this->undo->updateVersion($row['target_id'])];
     }
 
     public function rollback(int $jobId, object $actor): array
@@ -135,7 +171,7 @@ class ProductImportService
                 return [...$result['rollback'], 'idempotent' => true];
             }
             $payload = json_decode($job->Payload, true, 512, JSON_THROW_ON_ERROR);
-            if ($job->Status !== 'committed' || empty($payload['undo']['products'])) {
+            if ($job->Status !== 'committed' || (empty($payload['undo']['products']) && empty($payload['undo']['updates']))) {
                 throw new RuntimeException('Undo is unavailable for this import. Only imports created with rollback support can be undone.', 409);
             }
             $rollback = [...$this->undo->remove($payload['undo'], $actor), 'job_id' => $job->id, 'rolled_back_at' => now()->toIso8601String(), 'rolled_back_by' => $actor->id, 'idempotent' => false];
