@@ -18,6 +18,11 @@ class ProductImportWorkbook
             throw new RuntimeException('Use the product upload template to import an in-house barcode.');
         }
         $headers = $inhouse ? self::TEMPLATE_HEADERS : self::HEADERS;
+        $hasRowTypes = $inhouse && isset($table['columns']['producttype']);
+        $fields = array_combine(self::HEADERS, $headers);
+        if ($hasRowTypes) {
+            $fields['producttype'] = 'producttype';
+        }
         $rows = [];
         foreach ($table['rows'] as $raw) {
             if ($raw['row'] <= $table['header_row']) {
@@ -25,8 +30,8 @@ class ProductImportWorkbook
             }
             $values = [];
             $formulas = [];
-            foreach (self::HEADERS as $index => $header) {
-                $column = $table['columns'][$headers[$index]];
+            foreach ($fields as $header => $sheetHeader) {
+                $column = $table['columns'][$sheetHeader];
                 $values[$header] = trim($raw['cells'][$column] ?? '');
                 if (isset($raw['formulas'][$column])) {
                     $formulas[] = $header;
@@ -44,7 +49,7 @@ class ProductImportWorkbook
             throw new RuntimeException('The workbook contains no product rows.');
         }
 
-        return ['sheet' => $table['sheet'], 'rows' => $rows, 'inhouse_barcodes' => $inhouse];
+        return ['sheet' => $table['sheet'], 'rows' => $rows, 'inhouse_barcodes' => $inhouse, 'row_product_types' => $hasRowTypes];
     }
 
     public static function key(string $value): string

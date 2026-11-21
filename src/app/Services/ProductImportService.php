@@ -126,6 +126,10 @@ class ProductImportService
         $fields = ['Product_Price', 'Minimum_Selling_Price', 'Product_Cost', 'Product_Stock', 'Status', 'updated_at'];
         $changes = ['Product_Price' => $row['price'], 'Minimum_Selling_Price' => $row['minimum'],
             'Product_Cost' => $row['cost'], 'Product_Stock' => $row['stock'], 'updated_at' => now()];
+        if (isset($row['product_type'])) {
+            $fields[] = 'Product_Type_Id';
+            $changes['Product_Type_Id'] = $row['type_id'];
+        }
         if ($row['action'] === 'restore') {
             $fields[] = 'Is_Active';
             $fields[] = 'deleted_at';

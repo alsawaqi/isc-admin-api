@@ -34,8 +34,10 @@ class ProductImportAnalysis
         $codeCounts = array_count_values(array_map(self::identifier(...), $codes));
         $skuCounts = array_count_values(array_map(self::identifier(...), $skuValues));
         $issues = [];
+        $hasRowTypes = $workbook['row_product_types'] ?? false;
+        $typesByName = collect($lookups['types'])->groupBy(fn ($t) => ProductImportWorkbook::key($t->name));
         $typeId = (int) ($options['product_type_id'] ?? 0);
-        if (! collect($lookups['types'])->contains(fn ($t) => (int) $t->id === $typeId)) {
+        if (! $hasRowTypes && ! collect($lookups['types'])->contains(fn ($t) => (int) $t->id === $typeId)) {
             $issues[] = $this->issue(0, 'error', 'product_type', 'Choose a product type for this import.');
         }
         $categoryGroups = $brandGroups = $rows = [];
@@ -51,6 +53,13 @@ class ProductImportAnalysis
             $add = function ($severity, $field, $message) use (&$rowIssues, $row) {
                 $rowIssues[] = $this->issue($row, $severity, $field, $message);
             };
+            if ($hasRowTypes) {
+                $rowType = $typesByName->get(ProductImportWorkbook::key($v['producttype']), collect());
+                $typeId = $rowType->count() === 1 ? (int) $rowType->first()->id : 0;
+                if (! $typeId) {
+                    $add('error', 'producttype', 'Enter a valid catalogue product type in the Product type column.');
+                }
+            }
             foreach (['srno', 'maingroups', 'subgroup', 'subsubgroup', 'brandname', 'productname', 'productdescription', 'barcode'] as $field) {
                 if ($v[$field] === '') {
                     $add('error', $field, "{$field} is required.");
@@ -114,7 +123,7 @@ class ProductImportAnalysis
                 }
             }
             $stock = null;
-            if ($v['mainstore'] === '' && ($options['blank_stock'] ?? 'reject') === 'zero') {
+            if ($v['mainstore'] === '' && ($hasRowTypes || ($options['blank_stock'] ?? 'reject') === 'zero')) {
                 $stock = 0;
                 $add('warning', 'mainstore', 'Blank stock explicitly treated as zero.');
             } elseif (! preg_match('/^\d+$/D', $v['mainstore']) || (float) $v['mainstore'] > 2147483647) {
@@ -122,7 +131,7 @@ class ProductImportAnalysis
             } else {
                 $stock = (int) $v['mainstore'];
             }
-            $priceColumn = ($options['price_column'] ?? 'max') === 'min' ? 'minsalesrate' : 'maxsalesrate';
+            $priceColumn = ! $hasRowTypes && ($options['price_column'] ?? 'max') === 'min' ? 'minsalesrate' : 'maxsalesrate';
             $price = $this->money($v[$priceColumn], 3);
             $minimum = $this->money($v['minsalesrate'], 3);
             $cost = $v['cost'] === '' ? null : $this->money($v['cost'], 3);
@@ -141,7 +150,7 @@ class ProductImportAnalysis
             if ($v['cost'] === '') {
                 $add('warning', 'cost', 'Cost is missing and will remain empty.');
             }
-            $rows[] = ['action' => $action, 'target_id' => $target?->id,
+            $rows[] = [...($hasRowTypes ? ['product_type' => $v['producttype']] : []), 'action' => $action, 'target_id' => $target?->id,
                 'target_version' => $target ? hash('sha256', json_encode($target, JSON_THROW_ON_ERROR)) : null,
                 'row' => $row, 'sku' => $v['srno'], 'name' => $v['productname'], 'description' => $v['productdescription'], 'barcode' => $v['barcode'],
                 'stock' => $stock, 'price' => $price, 'minimum' => $minimum, 'cost' => $cost, 'type_id' => $typeId,
@@ -152,7 +161,7 @@ class ProductImportAnalysis
         $errors = collect($issues)->where('severity', 'error')->count();
 
         $ready = collect($rows)->where('valid', true);
-        return ['sheet' => $workbook['sheet'], 'rows' => $rows, 'issues' => $issues, 'categories' => array_values($categoryGroups), 'brands' => array_values($brandGroups),
+        return ['row_product_types' => $hasRowTypes, 'sheet' => $workbook['sheet'], 'rows' => $rows, 'issues' => $issues, 'categories' => array_values($categoryGroups), 'brands' => array_values($brandGroups),
             'can_commit' => $errors === 0, 'summary' => ['total' => count($rows), 'valid' => collect($rows)->where('valid', true)->count(), 'errors' => $errors,
                 'add' => $ready->where('action', 'add')->count(), 'update' => $ready->where('action', 'update')->count(),
                 'restore' => $ready->where('action', 'restore')->count(), 'blocked' => count($rows) - $ready->count(),

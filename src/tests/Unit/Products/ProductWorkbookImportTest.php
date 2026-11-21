@@ -281,6 +281,31 @@ class ProductWorkbookImportTest extends TestCase
         }
     }
 
+    public function test_row_types_control_mixed_imports_prices_and_stock_with_no_type_selection(): void
+    {
+        DB::table('Products_Types_Master_T')->insert(['id' => 8, 'Product_Types_Name' => 'Tools']);
+        $book = [...$this->workbook(['mainstore' => ''], 2), 'inhouse_barcodes' => true, 'row_product_types' => true];
+        $book['rows'][0]['values']['producttype'] = 'Electrical';
+        $book['rows'][1]['values']['producttype'] = 'tools';
+        $options = [...$this->options, 'product_type_id' => null, 'price_column' => 'min', 'match_inhouse' => true];
+        $preview = $this->preview($book, $options);
+        $this->assertTrue($preview['can_commit']);
+        $this->assertSame([4, 8], array_column($preview['rows'], 'type_id'));
+        $this->assertSame(['70.000', '70.000'], array_column($preview['rows'], 'price'));
+        $this->assertSame([0, 0], array_column($preview['rows'], 'stock'));
+        $service = app(ProductImportService::class);
+        $service->commit($preview['preview_token'], $this->actor);
+        $book['rows'][0]['values']['producttype'] = 'Tools';
+        $receipt = $service->commit($this->preview($book, $options)['preview_token'], $this->actor);
+        $this->assertEquals(8, DB::table('Products_Master_T')->where('Product_Sku', 'SKU-0')->value('Product_Type_Id'));
+        $service->rollback($receipt['job_id'], $this->actor);
+        $this->assertEquals(4, DB::table('Products_Master_T')->where('Product_Sku', 'SKU-0')->value('Product_Type_Id'));
+        foreach (['', 'Unknown'] as $invalid) {
+            $book['rows'][0]['values']['producttype'] = $invalid;
+            $this->assertFalse($this->preview($book, $options)['rows'][0]['valid']);
+        }
+    }
+
     public function test_template_commits_exact_inhouse_code_and_supports_undo(): void
     {
         $file = tempnam(sys_get_temp_dir(), 'product-template');
